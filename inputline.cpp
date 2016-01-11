@@ -14,6 +14,7 @@ Inputline::Inputline(char *fname) {
     fprintf(stderr,"\nCan't open input file %s (%s)\n\n", fname, strerror(errno));
     exit(-1);
   }
+  this->fname = strdup(fname);
 
   MA(input_buf, INPUTLINE_CHUNK, char);
   MA(mod_buf, INPUTLINE_CHUNK, char);

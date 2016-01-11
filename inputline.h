@@ -6,11 +6,14 @@
 
 class Inputline {
  public:
+  char *fname;
+  
   Inputline(char *fname);
   ~Inputline();
   char *nextline(int return_copy);
   void pushback();
-
+  
+  
  private:
   FILE *f;
   char *input_buf; /* verbatim copy of input line that was read */
