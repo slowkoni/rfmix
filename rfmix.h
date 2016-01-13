@@ -2,6 +2,7 @@
 #define RFMIX_H
 
 #include "genetic-map.h"
+#include "hash-table.h"
 
 /* Program command line and configuration options - see rfmix.c for option definitions
    and default values set in init_options(). The global variable rfmix_opts, declared 
@@ -63,6 +64,7 @@ typedef struct {
 
   int n_samples;
   sample_t *samples;
+  HashTable *sample_hash;
   
   int n_snps;
   snp_t *snps;

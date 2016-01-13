@@ -19,7 +19,7 @@ static option_t options[] = {
     "VCF file with samples to analyze (required)" },
   { 'r', "reference-file", &rfmix_opts.rvcf_fname, OPT_STR, 1, 1,
     "VCF file with reference individuals (required)" },
-  { 'c', "classes-file", &rfmix_opts.class_fname, OPT_STR, 1, 1,
+  { 'm', "sample-map", &rfmix_opts.class_fname, OPT_STR, 1, 1,
     "Reference panel sample population classification map (required)" },
   { 'g', "genetic-map", &rfmix_opts.genetic_fname, OPT_STR, 1, 1,
     "Genetic map file (required)" },

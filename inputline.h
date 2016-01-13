@@ -7,9 +7,11 @@
 class Inputline {
  public:
   char *fname;
+  int line_no;
   
   Inputline(char *fname);
   ~Inputline();
+  char *nextline();
   char *nextline(int return_copy);
   void pushback();
   
@@ -21,7 +23,6 @@ class Inputline {
 
   int alloc_length;
   int line_stored;
-  int line_no;
   pthread_mutex_t lock;
 };
 

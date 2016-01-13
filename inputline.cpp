@@ -77,6 +77,10 @@ char *Inputline::nextline(int return_copy) {
   return rval;
 }
 
+char *Inputline::nextline(void) {
+  return nextline(INPUTLINE_NOCOPY);
+}
+
 void Inputline::pushback() {
   /* it probably does not make sense for inputline_pushback() to be used in
      a multithreaded context */
