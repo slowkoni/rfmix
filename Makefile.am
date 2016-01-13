@@ -4,4 +4,4 @@ CXXFLAGS += -march=core2
 LDFLAGS = -lpthread
 
 bin_PROGRAMS = rfmix
-rfmix_SOURCES = cmdline-utils.c inputline.cpp genetic-map.cpp md5rng.cpp rfmix.cpp load-input.cpp
+rfmix_SOURCES = cmdline-utils.c inputline.cpp genetic-map.cpp md5rng.cpp rfmix.cpp load-input.cpp hash-table.cpp
