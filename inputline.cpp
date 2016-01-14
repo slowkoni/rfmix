@@ -223,6 +223,7 @@ Inputline::~Inputline() {
 
   fclose(f);
   f = NULL;
+  free(fname);
   if (child_pid) {
     kill(child_pid, SIGINT);
     waitpid(child_pid, NULL, 0);

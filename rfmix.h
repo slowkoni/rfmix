@@ -69,6 +69,7 @@ typedef struct {
   int crf_index; // CRF window index for this snp
 } snp_t;
 
+/* IMPORTANT: the current_p and est_p arrays are using the 8 bit float scheme discussed above */
 typedef struct {
   char *sample_id;
   int apriori_subpop; // 0 means query/admixed/unknown sample. 1 through K, reference sample

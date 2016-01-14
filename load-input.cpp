@@ -83,8 +83,11 @@ static void load_samples(input_t *input) {
     if (p[0] == 0 || p[0] == '#') continue;
 
     sample_id = strsep(&p, "\t");
+    if (sample_id[0] == 0) continue;
+    
     reference_pop = strsep(&p, "\t");
-
+    if (reference_pop[0] == 0) continue;
+    
     /* Search for this reference subpop in the already known list */
     for(i=0; i < input->n_subpops; i++)
       if (strcasecmp(input->reference_subpops[i], reference_pop) == 0) break;
@@ -439,6 +442,8 @@ input_t *load_input(void) {
 
 void free_input(input_t *input) {
 
+  free(input->crf_windows);
+
   free(input->snps);
   input->n_snps = 0;
   
@@ -455,14 +460,22 @@ void free_input(input_t *input) {
       free(sample->est_p[h][0]);
       free(sample->est_p[h]);
     }
+
+    int *tmp = (int *) input->sample_hash->lookup(sample->sample_id);
+    free(tmp);
+    free(sample->sample_id);
   }
 
-  free(input->crf_windows);
 
   delete input->sample_hash;
   free(input->samples);
   input->n_samples = 0;
-  
+
+  for(int i=0; i < input->n_subpops; i++)
+    free(input->reference_subpops[i]);
+  free(input->reference_subpops);
+
   delete input->genetic_map;
   free(input);
+
 }
