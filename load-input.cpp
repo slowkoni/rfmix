@@ -118,7 +118,10 @@ static void load_samples(input_t *input) {
     samples[i].haplotype[1] = NULL;
     samples[i].current_p[0] = NULL;
     samples[i].current_p[1] = NULL;
-    samples[i].est_p = NULL;
+    samples[i].est_p[0] = NULL;
+    samples[i].est_p[1] = NULL;
+    samples[i].est_p[2] = NULL;
+    samples[i].est_p[3] = NULL;
   }
 
   /* All work of this function is stored into the input_t struct and made available
@@ -379,20 +382,19 @@ static void set_crf_points(input_t *input) {
   }
   fprintf(stderr,"done\n");
 
-  fprintf(stderr,"\tsetting up conditional random field states... ");
+  fprintf(stderr,"\tsetting up random forest probability estimation arrays... ");
   for(int k=0; k < input->n_samples; k++) {
     sample_t *sample = input->samples + k;
-    
-    /* The CRF state is the tuple (subpop,subpop) for the two haplotypes, times two for 
-       phase-switched vs. non-phase-switched */
-    int n_states = (input->n_subpops-1)*(input->n_subpops-1)*2;
 
-    /* These arrays hold the probability distribution for the observation (CRF state) 
-       which is estimated by the random forest classification. It does not need to be
-       initialized here, it will be by the random forest code */
-    MA(sample->est_p, sizeof(AF_TYPE *)*input->n_windows, AF_TYPE *);
+    for(int h=0; h < 4; h++) {
+      MA(sample->est_p[h], sizeof(AF_TYPE *)*input->n_windows, AF_TYPE *);
+
+      for(int i=0; i < input->n_windows; i++)
+	MA(sample->est_p[h][i], sizeof(AF_TYPE)*input->n_subpops, AF_TYPE);
+    }
+      /*    MA(sample->est_p, sizeof(AF_TYPE *)*input->n_windows, AF_TYPE *);
     for(int i=0; i < input->n_windows; i++)
-      MA(sample->est_p[i], sizeof(AF_TYPE)*n_states, AF_TYPE);
+    MA(sample->est_p[i], sizeof(AF_TYPE)*n_states, AF_TYPE);*/
   }
   fprintf(stderr,"done\n");
 }
@@ -449,9 +451,11 @@ void free_input(input_t *input) {
       free(sample->current_p[h]);
     }
 
-    for(int w=0; w < input->n_windows; w++)
-      free(sample->est_p[w]);
-    free(sample->est_p);
+    for(int h=0; h < 4; h++) {
+      for(int w=0; w < input->n_windows; w++)
+	free(sample->est_p[h][w]);
+      free(sample->est_p[h]);
+    }
   }
 
   free(input->crf_windows);
