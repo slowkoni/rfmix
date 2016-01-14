@@ -3,13 +3,137 @@
 #include <string.h>
 #include <errno.h>
 
-#include <kmacros.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+#include "kmacros.h"
 #include "inputline.h"
 
 #define INPUTLINE_CHUNK (8192)
-Inputline::Inputline(char *fname) {
+FILE *Inputline::open_gzip_read(char *fname) {
+  int fds[2];
+  int child_pid;
+  FILE *f;
+  
+  if (pipe(fds) != 0) {
+    fprintf(stderr,"Can't create pipe to read output from gzip -dc (%s)\n", strerror(errno));
+    exit(-1);
+  }
 
-  f = fopen(fname, "r");
+  child_pid = fork();
+  if (child_pid == 0) {
+    /* New child process executes this code, which just dups the write end of the pipe to
+       standard output, so that gzip which writes to stdout will really be outputing to 
+       the pipe for the parent to read */
+    close(0);
+    close(1);
+    close(fds[0]);
+    dup2(fds[1], 1);
+    close(fds[1]);
+    execlp("gzip","gzip","-dc",fname, NULL);
+
+    /* If gzip is successfully started, execlp() never returns and these lines
+       are never reached. Only if execlp() fails will the process continue here */
+    fprintf(stderr,"Can't execute gzip to decompress input file %s (%s)\n", fname, strerror(errno));
+    exit(-1);
+  } else {
+    /* parent process. If the child_pid is -1, then fork() failed, which pretty much
+       never happens. */
+    if (child_pid == -1) {
+      fprintf(stderr,"Can't fork() a child process to start gzip for decompression (%s)\n",
+	      strerror(errno));
+      exit(-1);
+    }
+
+    /* Close the write end of the pipe because we are only going to read. Then open a normal
+       stdio FILE stream from the pipe read end file descriptor. We set the child_pid field
+       of the object so that the destructor knows to call wait() to reap the child process.
+       Otherwise, it is a zombie hanging around */
+    close(fds[1]);
+    f = fdopen(fds[0], "r");
+    if (f == NULL) {
+      fprintf(stderr,"Can't open file handle from file descriptor to read gzip output (%s)\n",
+	      strerror(errno));
+      exit(-1);
+    }
+    this->child_pid = child_pid;
+  }
+  
+  return f;
+}
+
+FILE *Inputline::open_bcftools_read(char *fname) {
+  int fds[2];
+  int child_pid;
+  FILE *f;
+  
+  if (pipe(fds) != 0) {
+    fprintf(stderr,"Can't create pipe to read output from bcftools (%s)\n", strerror(errno));
+    exit(-1);
+  }
+
+  child_pid = fork();
+  if (child_pid == 0) {
+    /* New child process executes this code, which just dups the write end of the pipe to
+       standard output, so that bcftools which writes to stdout will really be outputing to 
+       the pipe for the parent to read */
+    close(0);
+    close(1);
+    close(fds[0]);
+    dup2(fds[1], 1);
+    close(fds[1]);
+    execlp("bcftools","bcftools","view",fname, NULL);
+
+    /* If bcftools is successfully started, execlp() never returns and these lines
+       are never reached. Only if execlp() fails will the process continue here */
+    fprintf(stderr,"Can't execute bcftools to read BCF file %s (%s) - is bcftools installed?\n",
+	    fname, strerror(errno));
+    exit(-1);
+  } else {
+    /* parent process. If the child_pid is -1, then fork() failed, which pretty much
+       never happens. */
+    if (child_pid == -1) {
+      fprintf(stderr,"Can't fork() a child process to start bcftools (%s)\n",
+	      strerror(errno));
+      exit(-1);
+    }
+
+    /* Close the write end of the pipe because we are only going to read. Then open a normal
+       stdio FILE stream from the pipe read end file descriptor. We set the child_pid field
+       of the object so that the destructor knows to call wait() to reap the child process.
+       Otherwise, it is a zombie hanging around */
+    close(fds[1]);
+    f = fdopen(fds[0], "r");
+    if (f == NULL) {
+      fprintf(stderr,"Can't open file handle from file descriptor to read bcftools output (%s)\n",
+	      strerror(errno));
+      exit(-1);
+    }
+    this->child_pid = child_pid;
+  }
+  
+  return f;
+}
+
+Inputline::Inputline(char *fname) {
+  /* use the filename extension to determine if we need a helper program to read 
+     the file. Functions above take care of starting the relevant program and
+     piping its output back to a FILE handle we can read like any other file */
+  int l = strlen(fname);
+  if ((l > 7 && strcmp(".bcf.gz", fname + l - 7) == 0) ||
+      (l > 4 && strcmp(".bcf", fname +l - 4) == 0)) {
+    f = open_bcftools_read(fname);
+  }
+  else if (l > 3 && strcmp(".gz", fname + l - 3) == 0) {
+    f = open_gzip_read(fname);
+  }
+  else {
+    f = fopen(fname, "r");
+    child_pid = 0; // There is no helper program in a child process if we are reading the file directly
+  }
+  
   if (f == NULL) {
     fprintf(stderr,"\nCan't open input file %s (%s)\n\n", fname, strerror(errno));
     exit(-1);
@@ -96,6 +220,10 @@ Inputline::~Inputline() {
 
   fclose(f);
   f = NULL;
+  if (child_pid) {
+    kill(child_pid, SIGINT);
+    waitpid(child_pid, NULL, 0);
+  }
   
   free(input_buf);
   input_buf = NULL;

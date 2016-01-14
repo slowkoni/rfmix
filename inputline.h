@@ -18,12 +18,16 @@ class Inputline {
   
  private:
   FILE *f;
+  int child_pid;
   char *input_buf; /* verbatim copy of input line that was read */
   char *mod_buf;   /* copy of input_buf returned that the user may modify */
 
   int alloc_length;
   int line_stored;
   pthread_mutex_t lock;
+
+  FILE *open_gzip_read(char *fname);
+  FILE *open_bcftools_read(char *fname);
 };
 
 enum { INPUTLINE_NOCOPY = 0, INPUTLINE_RETURN_COPY = 1 };

@@ -42,7 +42,8 @@ void GeneticMap::load_map(char *fname, char *chm) {
     char *p, *q;
     p = inputline;
     q = strsep(&p," \t");
-    if (strcmp(q, chm) != 0) continue;
+    if (strcmp(q, chm) != 0 && (strncasecmp(q, "chr", 3) != 0 || strcmp(q+3, chm) != 0)) 	
+      continue;
 
     if (n_pos % POS_ALLOC_STEP == 0)
       RA(tmp_map, n_pos + POS_ALLOC_STEP, map_pos_t);

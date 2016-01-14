@@ -26,7 +26,7 @@ static char *vcf_skip_headers(Inputline *vcf) {
     if (p[0] == 0 || p[0] == '#') continue;
   }
   if (p == NULL) {
-    fprintf(stderr,"\nNo genotype data found in query VCF file %s.\n\n", vcf->fname);
+    fprintf(stderr,"\nNo genotype data found in VCF file %s.\n\n", vcf->fname);
     exit(-1);
   }
   return p;
@@ -330,16 +330,20 @@ input_t *load_input(void) {
   input_t *input;
   MA(input, sizeof(input_t), input_t);
 
+  fprintf(stderr,"Loading genetic map for chromosome %s ...  ", rfmix_opts.chromosome);
   input->genetic_map = new GeneticMap();
   input->genetic_map->load_map(rfmix_opts.genetic_fname, rfmix_opts.chromosome);
-
+  fprintf(stderr,"done\n");
+  
   fprintf(stderr,"Scanning input VCFs for common SNPs on chromosome %s ...   ", rfmix_opts.chromosome);
   identify_common_snps(input);
-  fprintf(stderr,"%d SNPs found\n", input->n_snps);
+  fprintf(stderr,"%d SNP\n", input->n_snps);
 
   /* Find and map out all the samples that we will be loading */
+  fprintf(stderr,"Mapping samples ... ");
   load_samples(input);
-
+  fprintf(stderr,"done\n");
+  
   /* Now we know all the samples that we will be loading, and all the SNPs,
      allocate the space to store the haplotypes */
   for(int i=0; i < input->n_samples; i++) {
@@ -347,7 +351,9 @@ input_t *load_input(void) {
     MA(input->samples[i].haplotype[1], sizeof(int8_t)*input->n_snps, int8_t);
   }
 
+  fprintf(stderr,"Loading haplotypes... ");
   load_alleles(input);
+  fprintf(stderr,"done\n");
   
   return input;
 }
