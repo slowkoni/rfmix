@@ -10,6 +10,7 @@
 
 #include "rfmix.h"
 #include "load-input.h"
+#include "random-forest.h"
 
 rfmix_opts_t rfmix_opts;
 
@@ -77,6 +78,8 @@ int main(int argc, char *argv[]) {
   verify_options();
 
   input_t *rfmix_input = load_input();
+
+  random_forest(rfmix_input);
   
   free_input(rfmix_input);
   return 0;

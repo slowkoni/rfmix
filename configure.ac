@@ -16,6 +16,9 @@ AC_PROG_CC
 
 # Checks for header files.
 AC_CHECK_HEADERS([float.h limits.h stdint.h stdlib.h string.h errno.h sys/time.h unistd.h])
+AC_CHECK_FUNCS(dup2 gettimeofday)
+
+AC_CHECK_LIB([pthread], [pthread_create], [], AC_MSG_FAILURE([POSIX thread library (-lpthread) is not available. Can not build or run without this.]),[-lpthread])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_INLINE
