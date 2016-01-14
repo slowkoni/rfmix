@@ -368,15 +368,19 @@ static void set_crf_points(input_t *input) {
     sample_t *sample = input->samples + k;
 
     for(int h=0; h < 2; h++) {
-      MA(sample->current_p[h], sizeof(AF_TYPE *)*input->n_windows, AF_TYPE *);
+      MA(sample->current_p[h], sizeof(int8_t *)*input->n_windows, int8_t *);
+      MA(sample->current_p[h][0], sizeof(int8_t)*input->n_windows*input->n_subpops, int8_t)
 
-      for(int i=0; i < input->n_windows; i++) {
-	MA(sample->current_p[h][i], sizeof(AF_TYPE)*input->n_subpops, AF_TYPE);
+	
+      for(int i=1; i < input->n_windows; i++)
+	sample->current_p[h][i] = sample->current_p[h][i-1] + input->n_subpops;
 
+
+      for(int i=0; i < input->n_windows; i++) {	
 	for(int s=0; s < input->n_subpops; s++) 
-	  sample->current_p[h][i][s] = 0.;
+	  sample->current_p[h][i][s] = (int8_t) -127;
 	  
-	if (sample->apriori_subpop != 0) sample->current_p[h][i][sample->apriori_subpop - 1] = 1.;
+	if (sample->apriori_subpop != 0) sample->current_p[h][i][sample->apriori_subpop - 1] = (int8_t) 127;
       }
     }
   }
@@ -387,14 +391,11 @@ static void set_crf_points(input_t *input) {
     sample_t *sample = input->samples + k;
 
     for(int h=0; h < 4; h++) {
-      MA(sample->est_p[h], sizeof(AF_TYPE *)*input->n_windows, AF_TYPE *);
-
-      for(int i=0; i < input->n_windows; i++)
-	MA(sample->est_p[h][i], sizeof(AF_TYPE)*input->n_subpops, AF_TYPE);
+      MA(sample->est_p[h], sizeof(int8_t *)*input->n_windows, int8_t *);
+      MA(sample->est_p[h][0], sizeof(int8_t)*input->n_windows*input->n_subpops, int8_t);
+      for(int i=1; i < input->n_windows; i++)
+	sample->est_p[h][i] = sample->est_p[h][i-1] + input->n_subpops;
     }
-      /*    MA(sample->est_p, sizeof(AF_TYPE *)*input->n_windows, AF_TYPE *);
-    for(int i=0; i < input->n_windows; i++)
-    MA(sample->est_p[i], sizeof(AF_TYPE)*n_states, AF_TYPE);*/
   }
   fprintf(stderr,"done\n");
 }
@@ -446,14 +447,12 @@ void free_input(input_t *input) {
 
     for(int h = 0; h < 2; h++) {
       free(sample->haplotype[h]);
-      for(int w=0; w < input->n_windows; w++)
-	free(sample->current_p[h][w]);
+      free(sample->current_p[h][0]);
       free(sample->current_p[h]);
     }
 
     for(int h=0; h < 4; h++) {
-      for(int w=0; w < input->n_windows; w++)
-	free(sample->est_p[h][w]);
+      free(sample->est_p[h][0]);
       free(sample->est_p[h]);
     }
   }

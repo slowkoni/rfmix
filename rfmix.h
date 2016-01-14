@@ -4,6 +4,25 @@
 #include "genetic-map.h"
 #include "hash-table.h"
 
+/* As a critical feature to trim memory usage, we are going to use a log odds
+   encoding of a floating point number restricted to range 0.0 - 1.0 by 
+   8-bit integers in range -127 to 127. This effectively creates 8 bit floats.
+   The error for representation is at maximum about 0.5% and peaks in the
+   center of the 0.0 to 1.0 range. The minimum possible and maximum possible
+   floating point numbers are 0.005008156 and 0.994991844 respectively. The
+   macro DF8(x) decodes the 8-bit integer to a double, and EF8(p) encodes
+   a number in range min to max above to an integer. It is responsibility
+   of the user of EF8(p) to set range to -127 to 127 and cast to int8_t */
+#define DF8(x) (1.0/(1.0+exp(((double) (x))/-24.0)))
+#define EF8(p) ((int) (log(p)/(1.0 - log(p))*24.0))
+
+/* Alternative with uniform rounding error over the range, and full range 0.0
+   to 1.0. Also less expensive to encode, decode. The log-odds formulation
+   above can be tweaked to give better accuracy at the tails at the expense
+   of rounding error in the middle of the range, or vice-versa. */
+//#define DF8(x) ((x)/255.0)
+//#define EF8(p) ((p)*255.0)
+
 /* Program command line and configuration options - see rfmix.c for option definitions
    and default values set in init_options(). The global variable rfmix_opts, declared 
    and set in rfmix.c is referenced all over the program for these values where needed */
@@ -54,8 +73,8 @@ typedef struct {
   char *sample_id;
   int apriori_subpop; // 0 means query/admixed/unknown sample. 1 through K, reference sample
   int8_t *haplotype[2];
-  AF_TYPE **current_p[2]; // current estimate of probability of subpop [hap][crf_window][subpop]
-  AF_TYPE **est_p[4]; // new estimate of probability of subpop estimate [hap][crf_window][subpop]
+  int8_t **current_p[2]; // current estimate of probability of subpop [hap][crf_window][subpop]
+  int8_t **est_p[4]; // new estimate of probability of subpop estimate [hap][crf_window][subpop]
 } sample_t;
 
 typedef struct {
