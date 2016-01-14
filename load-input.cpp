@@ -326,6 +326,77 @@ static void load_alleles(input_t *input) {
   n_cols = 0;
 }
 
+static void set_crf_points(input_t *input) {
+  /* Determine the number of defined CRF points we have (CRF windows), the
+     central SNP that defines each one, and the boundaries of the larger
+     window used to source SNPs for the random forest classification */
+  fprintf(stderr,"\n\tsetting up CRF points and random forest windows... ");
+  input->n_windows = input->n_snps / rfmix_opts.crf_spacing;
+  MA(input->crf_windows, sizeof(crf_window_t)*input->n_windows, crf_window_t);
+
+  int rf_start, rf_end;
+  int j = rfmix_opts.crf_spacing / 2;
+  for(int i=0; i < input->n_windows; i++,j += rfmix_opts.crf_spacing) {
+    input->crf_windows[i].snp_idx = j;
+
+    rf_start = j - rfmix_opts.rf_window_size / 2;
+    if (rf_start < 0) rf_start = 0;
+
+    rf_end = rf_start + rfmix_opts.rf_window_size - 1;
+    if (rf_end >= input->n_snps) {
+      rf_end = input->n_snps - 1;
+      rf_start = rf_end - rfmix_opts.rf_window_size + 1;
+      if (rf_start < 0) rf_start = 0;
+    }
+
+    input->crf_windows[i].rf_start_idx = rf_start;
+    input->crf_windows[i].rf_end_idx = rf_end;
+  }
+  fprintf(stderr,"done\n");
+  
+  /* Set up and initialize the current (starting) marginal probabilities for subpop
+     assignment for each haplotype at each CRF window. These values start as 100%
+     probability the haplotypes are from the apriori subpopulation for reference
+     individuals, and just initialized to zero for all query individuals. These are
+     calculated at each EM iteration by the Forward-Backward algorithm in the
+     conditional random field code */
+  fprintf(stderr,"\tinitializing apriori reference subpop across CRF... ");
+  for(int k=0; k < input->n_samples; k++) {
+    sample_t *sample = input->samples + k;
+
+    for(int h=0; h < 2; h++) {
+      MA(sample->current_p[h], sizeof(AF_TYPE *)*input->n_windows, AF_TYPE *);
+
+      for(int i=0; i < input->n_windows; i++) {
+	MA(sample->current_p[h][i], sizeof(AF_TYPE)*input->n_subpops, AF_TYPE);
+
+	for(int s=0; s < input->n_subpops; s++) 
+	  sample->current_p[h][i][s] = 0.;
+	  
+	if (sample->apriori_subpop != 0) sample->current_p[h][i][sample->apriori_subpop - 1] = 1.;
+      }
+    }
+  }
+  fprintf(stderr,"done\n");
+
+  fprintf(stderr,"\tsetting up conditional random field states... ");
+  for(int k=0; k < input->n_samples; k++) {
+    sample_t *sample = input->samples + k;
+    
+    /* The CRF state is the tuple (subpop,subpop) for the two haplotypes, times two for 
+       phase-switched vs. non-phase-switched */
+    int n_states = (input->n_subpops-1)*(input->n_subpops-1)*2;
+
+    /* These arrays hold the probability distribution for the observation (CRF state) 
+       which is estimated by the random forest classification. It does not need to be
+       initialized here, it will be by the random forest code */
+    MA(sample->est_p, sizeof(AF_TYPE *)*input->n_windows, AF_TYPE *);
+    for(int i=0; i < input->n_windows; i++)
+      MA(sample->est_p[i], sizeof(AF_TYPE)*n_states, AF_TYPE);
+  }
+  fprintf(stderr,"done\n");
+}
+
 input_t *load_input(void) {
   input_t *input;
   MA(input, sizeof(input_t), input_t);
@@ -337,12 +408,12 @@ input_t *load_input(void) {
   
   fprintf(stderr,"Scanning input VCFs for common SNPs on chromosome %s ...   ", rfmix_opts.chromosome);
   identify_common_snps(input);
-  fprintf(stderr,"%d SNP\n", input->n_snps);
+  fprintf(stderr,"%d SNPs\n", input->n_snps);
 
   /* Find and map out all the samples that we will be loading */
   fprintf(stderr,"Mapping samples ... ");
   load_samples(input);
-  fprintf(stderr,"done\n");
+  fprintf(stderr,"%d samples combined\n", input->n_samples);
   
   /* Now we know all the samples that we will be loading, and all the SNPs,
      allocate the space to store the haplotypes */
@@ -354,6 +425,10 @@ input_t *load_input(void) {
   fprintf(stderr,"Loading haplotypes... ");
   load_alleles(input);
   fprintf(stderr,"done\n");
+
+  fprintf(stderr,"Defining and initializing conditional random field...  ");
+  set_crf_points(input);
+  fprintf(stderr,"done\n");
   
   return input;
 }
@@ -364,6 +439,23 @@ void free_input(input_t *input) {
   free(input->snps);
   input->n_snps = 0;
   
+  for(int i=0; i < input->n_samples; i++) {
+    sample_t *sample = input->samples + i;
+
+    for(int h = 0; h < 2; h++) {
+      free(sample->haplotype[h]);
+      for(int w=0; w < input->n_windows; w++)
+	free(sample->current_p[h][w]);
+      free(sample->current_p[h]);
+    }
+
+    for(int w=0; w < input->n_windows; w++)
+      free(sample->est_p[w]);
+    free(sample->est_p);
+  }
+
+  free(input->crf_windows);
+
   delete input->sample_hash;
   free(input->samples);
   input->n_samples = 0;

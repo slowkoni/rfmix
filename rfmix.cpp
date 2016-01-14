@@ -29,8 +29,8 @@ static option_t options[] = {
   /* Tunable algorithm parameters (none are required - defaults are reasonable)*/
   { 'w', "rf-window-size", &rfmix_opts.rf_window_size, OPT_INT, 0, 1,
     "Random forest window size (class estimation window size)" },
-  { 'a', "crf-window-size", &rfmix_opts.crf_window_size, OPT_INT, 0, 1,
-    "Conditional Random Field window size (analyze window size)" },
+  { 'c', "crf-spacing", &rfmix_opts.crf_spacing, OPT_INT, 0, 1,
+    "Conditional Random Field spacing (# of SNPs)" },
   { 'g', "generations", &rfmix_opts.generations, OPT_INT, 0, 1,
     "Average number of generations since expected admixture" },
   { 't', "trees", &rfmix_opts.n_trees, OPT_INT, 0, 1,
@@ -58,7 +58,7 @@ static void init_options(void) {
   rfmix_opts.output_basename = (char *) "";
 
   rfmix_opts.rf_window_size = 20;
-  rfmix_opts.crf_window_size = 5;
+  rfmix_opts.crf_spacing = 5;
   rfmix_opts.generations = 8;
   rfmix_opts.n_trees = 100;
 

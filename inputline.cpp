@@ -10,6 +10,9 @@
 
 #include "kmacros.h"
 #include "inputline.h"
+#include "rfmix.h"
+
+extern rfmix_opts_t rfmix_opts;
 
 #define INPUTLINE_CHUNK (8192)
 FILE *Inputline::open_gzip_read(char *fname) {
@@ -84,7 +87,7 @@ FILE *Inputline::open_bcftools_read(char *fname) {
     close(fds[0]);
     dup2(fds[1], 1);
     close(fds[1]);
-    execlp("bcftools","bcftools","view",fname, NULL);
+    execlp("bcftools","bcftools","view","--regions", rfmix_opts.chromosome, fname, NULL);
 
     /* If bcftools is successfully started, execlp() never returns and these lines
        are never reached. Only if execlp() fails will the process continue here */

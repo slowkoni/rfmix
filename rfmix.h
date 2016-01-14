@@ -15,7 +15,7 @@ typedef struct {
   char *output_basename;
 
   int rf_window_size;
-  int crf_window_size;
+  int crf_spacing;
   int generations;
   int n_trees;
   int reanalyze_reference;
