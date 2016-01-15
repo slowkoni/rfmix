@@ -120,20 +120,21 @@ static void setup_query_sample(wsample_t *wsample, sample_t *sample,
   for(k=0; k < 4; k++) wsample->est_p[k] = 0.;
 }
 
-static void setup_ref_haplotype(int **ref_haplotypes, double **current_p,
-				sample_t *sample, int snp_start, int snp_end,
+static void setup_ref_haplotype(int **ref_haplotypes, double **current_p, int n_subpops,
+				int w, sample_t *sample, int snp_start, int snp_end,
 				mm *ma) {
   int s, t;
 
   ref_haplotypes[0] = (int *) ma->allocate(sizeof(int)*(snp_end - snp_start + 1), WHEREFROM);
   ref_haplotypes[1] = (int *) ma->allocate(sizeof(int)*(snp_end - snp_start + 1), WHEREFROM);
   for(s=snp_start,t=0; s <= snp_end; s++,t++) {
-    ref_haplotypes[0][t] = input->samples[i].haplotypes[0][s];
-    ref_haplotypes[1][t] = input->samples[i].haplotypes[1][s];
+    ref_haplotypes[0][t] = sample->haplotype[0][s];
+    ref_haplotypes[1][t] = sample->haplotype[1][s];
   }
-  for(int k=0; k < input->n_subpops; k++) {
-    current_p[0][k] = input->samples[i].current_p[0][w][k];
-    current_p[1][k] = input->samples[i].current_p[1][w][k]
+  
+  for(int k=0; k < n_subpops-1; k++) {
+    current_p[0][k] = sample->current_p[0][w][k];
+    current_p[1][k] = sample->current_p[1][w][k];
   }
 }
 
@@ -144,7 +145,10 @@ static void *random_forest_thread(void *targ) {
   window_t window;
   int i;
   
+  mm *ma = new mm(2, WHEREFROM);
+  
   window.n_query_samples = 0;
+  window.n_ref_haplotypes = 0;
   for(i=0; i < input->n_samples; i++) {
     if (input->samples[i].apriori_subpop == 0)
       window.n_query_samples++;
@@ -159,13 +163,15 @@ static void *random_forest_thread(void *targ) {
   MA(window.query_samples, sizeof(wsample_t)*window.n_query_samples, wsample_t);
   MA(window.ref_haplotypes, sizeof(int *)*window.n_ref_haplotypes, int *);
   MA(window.current_p, sizeof(double *)*window.n_ref_haplotypes, double *);
-  MA(window.current_p[0], sizeof(double)*window.n_ref_haplotypes*input->n_subpops, double);
-  for(i=1; i < input->n_subpops; i++)
-    window.current_p[i] = window.current_p[i-1] + input->n_subpops;
+  MA(window.current_p[0], sizeof(double)*window.n_ref_haplotypes*(input->n_subpops-1), double);
+  for(i=1; i < window.n_ref_haplotypes; i++)
+    window.current_p[i] = window.current_p[i-1] + (input->n_subpops - 1);
   
   /* args object is always locked at the loop start point or when loop exits */
   pthread_mutex_lock(&args->lock);
   for(;;) {
+    ma->recycle();
+    
     /* Get the next chunk of windows to process and unlock the shared args object */
     int start_window = args->next_window;
     int end_window = start_window + THREAD_WINDOW_CHUNK_SIZE;
@@ -173,7 +179,6 @@ static void *random_forest_thread(void *targ) {
     args->next_window = end_window;
     pthread_mutex_unlock(&args->lock);
 
-    mm *ma = new mm(1024*1024, WHEREFROM);
     for(int w=start_window; w < end_window; w++) {
       crf_window_t *crf = input->crf_windows + w;
       
@@ -190,12 +195,12 @@ static void *random_forest_thread(void *targ) {
 			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
 	  q++;
 	} else {
-	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r,
-			      input->samples + i, crf->rf_start_idx, crf->rf_end_idx, ma)
+	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r, input->n_subpops,
+			      w, input->samples + i, crf->rf_start_idx, crf->rf_end_idx, ma);
 	  r += 2;
 	}
       }
-	
+
     /* Call window function to process the window */
 
     /* Repack window_t object results into input_t and reset/reinitialize window_t 
@@ -213,6 +218,13 @@ static void *random_forest_thread(void *targ) {
   }
   pthread_mutex_unlock(&args->lock);
 
+  delete ma;
+
+  free(window.current_p[0]);
+  free(window.current_p);
+  free(window.ref_haplotypes);
+  free(window.query_samples);
+  
   return NULL;
 }
 

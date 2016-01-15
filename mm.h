@@ -45,7 +45,7 @@ void mm_free(mm_block_t *mm);
 
 class mm {
  public:
-  mm(int mb_blocksize);
+  mm(int mb_blocksize, WHEREARGS);
   ~mm();
   void *allocate(int size, WHEREARGS);
   void recycle();

@@ -12,17 +12,18 @@
 /* implementation of a scatter/gather memory allocator -- see mm.h for 
    details */
 
-mm::mm(int block_size) {
+#define BLOCKS_PER_ALLOC (2)
+mm::mm(int block_size, WHEREARGS) {
 
-  this->block_size = block_size;
+  this->block_size = block_size*1024*1024;
 
   n_blocks = 1;
-  MA(blocks, sizeof(void *)*128, void *);
-  MA(blocks[0], sizeof(char)*block_size, char);
+  MA(blocks, sizeof(void *)*BLOCKS_PER_ALLOC, void *);
+  MA(blocks[0], sizeof(char)*this->block_size, char);
   current_block = 0;
   ptr = 0;
 }
- 
+
 void *mm::allocate(int size, WHEREARGS) {
   void *p;
   size_t asize;
@@ -50,8 +51,8 @@ void *mm::allocate(int size, WHEREARGS) {
 #endif
 
   if (ptr + asize >= block_size) {
-    if (n_blocks % 128 == 0)
-      RA(blocks, sizeof(void *)*(n_blocks + 128), void *);
+    if (n_blocks % BLOCKS_PER_ALLOC == 0)
+      RA(blocks, sizeof(void *)*(n_blocks + BLOCKS_PER_ALLOC), void *);
     
     MA(blocks[n_blocks], block_size, char);
     n_blocks++;
@@ -91,16 +92,17 @@ void mm::recycle() {
   if (n_blocks > 1) {
     new_blocksize = block_size * n_blocks;
 
-    /* don't allow a blocksize increment to bring it over 100 Mb. Otherwise,
+    /* don't allow a blocksize increment to bring it over 16 Mb. Otherwise,
        make sure the new_blocksize is a multiple of the system pagesize */
-    if (new_blocksize > 100*1024*1024) {
-      new_blocksize = 100*1024*1024;
+    if (new_blocksize > 16*1024*1024) {
+      new_blocksize = 16*1024*1024;
     } else {
       new_blocksize = (new_blocksize | (getpagesize()-1)) + 1;
     }
 
     if (new_blocksize > block_size) {
       for(i=1;i<n_blocks;i++) free(blocks[i]);
+      
       RA(blocks[0], sizeof(char)*new_blocksize, char);
       block_size = new_blocksize;
       n_blocks = 1;
