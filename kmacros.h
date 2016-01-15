@@ -49,7 +49,7 @@ if ((p) == NULL) {  \
 #define FWRITE(p, s, n, f) if (fwrite((p), (s), (n), (f)) < (n)) { fprintf(stderr,"Warning: fwrite() returned short write at %s:%d\n",__FILE__,__LINE__); }
 
 
-#define WHEREARGS char *callfunc, char *callfile, char *callline
+#define WHEREARGS char *callfunc, char *callfile, int callline
 #define WHEREFROM __func__, __FILE__, __LINE__
 
 #ifndef FOPEN
