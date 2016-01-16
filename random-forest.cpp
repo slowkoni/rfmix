@@ -24,7 +24,7 @@ typedef struct {
 typedef struct {
   int sample_idx;
   int *haplotype[4];
-  double est_p[4];
+  double *est_p[4];
 } wsample_t;
 
 typedef struct {
@@ -92,7 +92,7 @@ static void grow_tree(tree_t *tree, node_t *node) {
 
 /* Unpacks alleles from sample_t haplotypes into a copy here in ints (for speed) and
    also creates the two additional flipped phase haplotypes to analyze */
-static void setup_query_sample(wsample_t *wsample, sample_t *sample,
+static void setup_query_sample(wsample_t *wsample, sample_t *sample, int n_subpops,
 			       int snp_start, int snp_end, int crf_snp,
 			       mm *ma) {
   int k, t, s;
@@ -117,7 +117,10 @@ static void setup_query_sample(wsample_t *wsample, sample_t *sample,
       wsample->haplotype[k+2][t] = sample->haplotype[l][s];
   }
   
-  for(k=0; k < 4; k++) wsample->est_p[k] = 0.;
+  for(int j=0; j < 4; j++) {
+    for(k=0; k < n_subpops-1; k++)
+      wsample->est_p[j][k] = 0.;
+  }
 }
 
 static void setup_ref_haplotype(int **ref_haplotypes, double **current_p, int n_subpops,
@@ -133,8 +136,8 @@ static void setup_ref_haplotype(int **ref_haplotypes, double **current_p, int n_
   }
   
   for(int k=0; k < n_subpops-1; k++) {
-    current_p[0][k] = sample->current_p[0][w][k];
-    current_p[1][k] = sample->current_p[1][w][k];
+    current_p[0][k] = DF8(sample->current_p[0][w][k]);
+    current_p[1][k] = DF8(sample->current_p[1][w][k]);
   }
 }
 
@@ -161,6 +164,11 @@ static void *random_forest_thread(void *targ) {
      themselves though may change with each window if the rf window size is 
      variable. Those are allocated in the loop using mm->allocate() */
   MA(window.query_samples, sizeof(wsample_t)*window.n_query_samples, wsample_t);
+  for(i=0; i < window.n_query_samples; i++) {
+    MA(window.query_samples[i].est_p[0], sizeof(double)*4*(input->n_subpops-1), double);
+    for(int j=1; j < 4; j++)
+      window.query_samples[i].est_p[j] = window.query_samples[i].est_p[j-1] + (input->n_subpops - 1);
+  }
   MA(window.ref_haplotypes, sizeof(int *)*window.n_ref_haplotypes, int *);
   MA(window.current_p, sizeof(double *)*window.n_ref_haplotypes, double *);
   MA(window.current_p[0], sizeof(double)*window.n_ref_haplotypes*(input->n_subpops-1), double);
@@ -170,7 +178,6 @@ static void *random_forest_thread(void *targ) {
   /* args object is always locked at the loop start point or when loop exits */
   pthread_mutex_lock(&args->lock);
   for(;;) {
-    ma->recycle();
     
     /* Get the next chunk of windows to process and unlock the shared args object */
     int start_window = args->next_window;
@@ -180,6 +187,11 @@ static void *random_forest_thread(void *targ) {
     pthread_mutex_unlock(&args->lock);
 
     for(int w=start_window; w < end_window; w++) {
+      /* At the beginning of each window we can recycle all the memory that was allocated
+	 for the previous window's needs. This is done effectively in one step by the
+	 mm class. */
+      ma->recycle();
+
       crf_window_t *crf = input->crf_windows + w;
       
     /* set up window_t object and decoded/unpacked information from the input_t object */
@@ -191,7 +203,7 @@ static void *random_forest_thread(void *targ) {
       for(i=0; i < input->n_samples; i++) {
 	if (input->samples[i].apriori_subpop == 0) {
 	  window.query_samples[q].sample_idx = i;
-	  setup_query_sample(window.query_samples + q, input->samples + i,
+	  setup_query_sample(window.query_samples + q, input->samples + i, input->n_subpops,
 			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
 	  q++;
 	} else {
@@ -206,6 +218,8 @@ static void *random_forest_thread(void *targ) {
     /* Repack window_t object results into input_t and reset/reinitialize window_t 
        for next window */
 
+      
+      
     }
     
     pthread_mutex_lock(&args->lock);
@@ -223,6 +237,8 @@ static void *random_forest_thread(void *targ) {
   free(window.current_p[0]);
   free(window.current_p);
   free(window.ref_haplotypes);
+  for(i=0; i < window.n_query_samples; i++) 
+    free(window.query_samples[i].est_p[0]);
   free(window.query_samples);
   
   return NULL;

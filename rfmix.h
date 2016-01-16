@@ -4,6 +4,7 @@
 #include "genetic-map.h"
 #include "hash-table.h"
 
+#include <math.h>
 /* As a critical feature to trim memory usage, we are going to use a log odds
    encoding of a floating point number restricted to range 0.0 - 1.0 by 
    8-bit integers in range -127 to 127. This effectively creates 8 bit floats.
