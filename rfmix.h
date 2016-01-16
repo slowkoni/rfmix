@@ -17,6 +17,7 @@
 #define DF8(x) (1.0/(1.0+exp(((double) (x))/-24.0)))
 #define EF8(p) ((int) (log(p)/(1.0 - log(p))*24.0))
 
+
 /* Alternative with uniform rounding error over the range, and full range 0.0
    to 1.0. Also less expensive to encode, decode. The log-odds formulation
    above can be tweaked to give better accuracy at the tails at the expense

@@ -5,12 +5,16 @@
 
 #include <pthread.h>
 #include <unistd.h>
+#include <float.h>
 
 #include "kmacros.h"
 #include "rfmix.h"
 #include "mm.h"
 
 extern rfmix_opts_t rfmix_opts;
+
+static double min_ef8_val;
+static double max_ef8_val;
 
 #define THREAD_WINDOW_CHUNK_SIZE (16)
 typedef struct {
@@ -217,9 +221,28 @@ static void *random_forest_thread(void *targ) {
 
     /* Repack window_t object results into input_t and reset/reinitialize window_t 
        for next window */
+      for(i=0; i < window.n_query_samples; i++) {
+	wsample_t *wsample = window.query_samples + i;
 
-      
-      
+	for(int j=0; j < 4; j++) {
+	  double sum = DBL_MIN;
+	  for(int k=0; k < input->n_subpops - 1; k++)
+	    sum += wsample->est_p[j][k];
+
+	  for(int k=0; k < input->n_subpops - 1; k++) {
+	    double p = wsample->est_p[j][k]/sum;
+	    /* Must be careful to not cause underflow or overflow of int8_t floating point encoding.
+	       Note this also takes care of problems with 0s or 1s */
+	    if (p <= min_ef8_val) {
+	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) -127;
+	    } else if (p >= max_ef8_val) {
+	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) 127;
+	    } else {
+	      input->samples[wsample->sample_idx].est_p[j][w][k] = EF8(p);
+	    }
+	  }
+	}
+      }
     }
     
     pthread_mutex_lock(&args->lock);
@@ -245,6 +268,12 @@ static void *random_forest_thread(void *targ) {
 }
 
 void random_forest(input_t *input) {
+  /* These are file scope variables used to ensure we do not underflow or overflow int8_t 
+     floating point encoding when setting values into input->samples[].est_p[][][]. These
+     are the end result of this entire file's computations */
+  min_ef8_val = DF8(-127);
+  max_ef8_val = DF8(127);
+  
   thread_args_t *args;
   MA(args, sizeof(thread_args_t), thread_args_t);
   args->input = input;
