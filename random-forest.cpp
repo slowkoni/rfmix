@@ -8,6 +8,7 @@
 #include <float.h>
 
 #include "kmacros.h"
+#include "md5rng.h"
 #include "rfmix.h"
 #include "mm.h"
 
@@ -21,7 +22,8 @@ typedef struct {
   input_t *input;
   int next_window;
   int windows_complete;
-
+  md5rng *rng;
+  
   pthread_mutex_t lock;
 } thread_args_t;
 
@@ -32,6 +34,7 @@ typedef struct {
 } wsample_t;
 
 typedef struct {
+  int idx;
   int n_snps;
   snp_t *snps;
 
@@ -70,6 +73,8 @@ typedef struct {
 } node_t;
 
 typedef struct {
+  md5rng *rng;
+
   int **haplotypes;
   int n_haplotypes;
 
@@ -81,7 +86,7 @@ typedef struct {
   int n_remain;
   int *remain_q;
   int n_snps;
-  int *snplist;
+  snp_t **snp_q;
 } tree_t;
   
 /* information that does not change as the tree progresses is in tree_t, except for the
@@ -92,6 +97,46 @@ typedef struct {
    nodes.*/
 static void grow_tree(tree_t *tree, node_t *node) {
 
+}
+
+static node_t *add_node(tree_t *tree, mm *ma) {
+
+  node_t *node = (node_t *) ma->allocate(sizeof(node_t), WHEREFROM);
+  return node;
+}
+
+static void bootstrap_haplotypes(tree_t *tree, window_t *window, mm *ma) {
+  int i;
+
+  tree->haplotypes = (int **) ma->allocate(sizeof(int *)*window->n_ref_haplotypes, WHEREFROM);
+  for(i=0; i < window->n_ref_haplotypes; i++) {
+    int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, i, 0, window->n_ref_haplotypes);
+
+    tree->haplotypes[i] = window->ref_haplotypes[j];
+  }
+  tree->n_haplotypes = i;
+}
+
+static tree_t *build_tree(window_t *window, md5rng *rng, mm *ma) {
+  int i;
+  tree_t *tree = (tree_t *) ma->allocate(sizeof(tree_t), WHEREFROM);
+
+  tree->rng = rng;
+  
+  bootstrap_haplotypes(tree, window, ma);
+  tree->remain_q = (int *) ma->allocate(sizeof(int)*tree->n_haplotypes, WHEREFROM);
+  for(i=0; i < tree->n_haplotypes; i++)
+    tree->remain_q[i] = i;
+  tree->n_remain = tree->n_haplotypes;
+
+  tree->snp_q = (snp_t **) ma->allocate(sizeof(snp_t *)*window->n_snps, WHEREFROM);
+  for(i=0; i < window->n_snps; i++)
+    tree->snp_q[i] = window->snps + i;
+  tree->n_snps = window->n_snps;
+  
+  tree->root = add_node(tree, ma);
+
+  return tree;
 }
 
 /* Unpacks alleles from sample_t haplotypes into a copy here in ints (for speed) and
@@ -199,6 +244,7 @@ static void *random_forest_thread(void *targ) {
       crf_window_t *crf = input->crf_windows + w;
       
     /* set up window_t object and decoded/unpacked information from the input_t object */
+      window.idx = w;
       window.n_snps = crf->rf_end_idx - crf->rf_start_idx + 1;
       window.snps = input->snps + crf->rf_start_idx;
 
@@ -219,6 +265,13 @@ static void *random_forest_thread(void *targ) {
 
     /* Call window function to process the window */
 
+      /* Build trees */
+      tree_t **trees = (tree_t **) ma->allocate(sizeof(tree_t *)*rfmix_opts.n_trees, WHEREFROM);
+      for(i=0; i < rfmix_opts.n_trees; i++) {
+	trees[i] = build_tree(&window, args->rng, ma);
+      }
+      /* evaluate trees */
+      
     /* Repack window_t object results into input_t and reset/reinitialize window_t 
        for next window */
       for(i=0; i < window.n_query_samples; i++) {
@@ -279,6 +332,8 @@ void random_forest(input_t *input) {
   args->input = input;
   args->next_window = 0;
   args->windows_complete = 0;
+  args->rng = new md5rng(rfmix_opts.random_seed);
+  
   pthread_mutex_init(&args->lock, NULL);
   
   pthread_t *threads;
@@ -290,7 +345,8 @@ void random_forest(input_t *input) {
   for(int i=0; i < rfmix_opts.n_threads; i++)
     pthread_join(threads[i], NULL);
   fprintf(stderr,"\n");
-  
+
+  delete args->rng;
   free(threads);
   free(args);
 }
