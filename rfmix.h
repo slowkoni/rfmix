@@ -101,4 +101,6 @@ typedef struct {
 /* This can be anything. The value I put here I pulled out of my backside. */
 #define RFOREST_RNG_KEY 0x949FC1AD
 
+void crf(input_t *input);
+
 #endif
