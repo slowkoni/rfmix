@@ -14,8 +14,8 @@
    macro DF8(x) decodes the 8-bit integer to a double, and EF8(p) encodes
    a number in range min to max above to an integer. It is responsibility
    of the user of EF8(p) to set range to -127 to 127 and cast to int8_t */
-#define DF8(x) (1.0/(1.0+exp(((double) (x))/-24.0)))
-#define EF8(p) ((int) (log(p)/(1.0 - log(p))*24.0))
+#define DF8(x) ( 1.0/(1.0+exp(((double) (x))/-24.0)) )
+#define EF8(p) ( (int) ( -24.0*log( (1.0-(p))/(p) ) ) )
 
 
 /* Alternative with uniform rounding error over the range, and full range 0.0

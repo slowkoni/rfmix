@@ -20,7 +20,7 @@ extern rfmix_opts_t rfmix_opts;
 static double min_ef8_val;
 static double max_ef8_val;
 
-#define THREAD_WINDOW_CHUNK_SIZE (16)
+#define THREAD_WINDOW_CHUNK_SIZE (3)
 typedef struct {
   input_t *input;
   int next_window;
@@ -92,6 +92,12 @@ typedef struct {
   
   node_t *root;
 } tree_t;
+
+static void output_vector(FILE *f, double *p, int n, char delim) {
+  fprintf(f,"%1.3f",p[0]);
+  for(int i=1; i < n; i++)
+    fprintf(f,"%c%1.3f", delim, p[i]);
+}
 
 static double normalize_vector(double *p, int n) {
   double p_sum = 0.;
@@ -470,7 +476,7 @@ static void evaluate_sample(wsample_t *wsample, window_t *window, tree_t **trees
          nodes were reached. */
       int d = 0;
       evaluate_tree(p, &d, wsample->haplotype[h], trees[t]->root, window->n_subpops);
-
+      
       for(int k=0; k < window->n_subpops-1; k++) wsample->est_p[h][k] += p[k]/(double) d;
     }
 
@@ -639,19 +645,17 @@ static void *random_forest_thread(void *targ) {
 	wsample_t *wsample = window.query_samples + i;
 
 	for(int j=0; j < 4; j++) {
-	  double sum = DBL_MIN;
-	  for(int k=0; k < input->n_subpops - 1; k++)
-	    sum += wsample->est_p[j][k];
 
 	  for(int k=0; k < input->n_subpops - 1; k++) {
-	    double p = wsample->est_p[j][k]/sum;
 	    /* Must be careful to not cause underflow or overflow of int8_t floating point encoding.
 	       Note this also takes care of problems with 0s or 1s */
+	    double p = wsample->est_p[j][k];
 	    if (p <= min_ef8_val) {
 	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) -127;
 	    } else if (p >= max_ef8_val) {
 	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) 127;
 	    } else {
+	      //fprintf(stderr,"%1.3f -> %d -> %1.3f\n", p, EF8(p), DF8(EF8(p)));
 	      input->samples[wsample->sample_idx].est_p[j][w][k] = EF8(p);
 	    }
 	  }
@@ -681,12 +685,29 @@ static void *random_forest_thread(void *targ) {
   return NULL;
 }
 
+static void dump_results(input_t *input) {
+  for(int i=0; i < input->n_samples; i++) {
+    if (input->samples[i].apriori_subpop == 0) {
+      for(int h=0; h < 4; h++) {
+	for(int j=0; j < input->n_windows; j++) {
+	  fprintf(stderr,"sample %d/%d\twindow %d", i, h, j);
+	  for(int k=0; k < input->n_subpops - 1; k++) {
+	    fprintf(stderr,"\t%1.3f", DF8(input->samples[i].est_p[h][j][k]));
+	  }
+	  fprintf(stderr,"\n");
+	}
+      }
+    }
+  }
+}
+
 void random_forest(input_t *input) {
   /* These are file scope variables used to ensure we do not underflow or overflow int8_t 
      floating point encoding when setting values into input->samples[].est_p[][][]. These
      are the end result of this entire file's computations */
   min_ef8_val = DF8(-127);
   max_ef8_val = DF8(127);
+  //  fprintf(stderr,"Minimum F8 %1.3f\tMaximum F8 %1.3f\n", min_ef8_val, max_ef8_val);
   
   thread_args_t *args;
   MA(args, sizeof(thread_args_t), thread_args_t);
@@ -707,6 +728,10 @@ void random_forest(input_t *input) {
     pthread_join(threads[i], NULL);
   fprintf(stderr,"\n");
 
+#if 0
+  dump_results(input);
+#endif
+  
   delete args->rng;
   free(threads);
   free(args);
