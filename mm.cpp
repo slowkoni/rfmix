@@ -12,13 +12,13 @@
 /* implementation of a scatter/gather memory allocator -- see mm.h for 
    details */
 
-#define BLOCKS_PER_ALLOC (2)
+#define BLOCK_LIST_ALLOC_STEP (32)
 mm::mm(int block_size, WHEREARGS) {
 
   this->block_size = block_size*1024*1024;
 
   n_blocks = 1;
-  MA(blocks, sizeof(void *)*BLOCKS_PER_ALLOC, void *);
+  MA(blocks, sizeof(void *)*BLOCK_LIST_ALLOC_STEP, void *);
   MA(blocks[0], sizeof(char)*this->block_size, char);
   current_block = 0;
   ptr = 0;
@@ -51,13 +51,16 @@ void *mm::allocate(int size, WHEREARGS) {
 #endif
 
   if (ptr + asize >= block_size) {
-    if (n_blocks % BLOCKS_PER_ALLOC == 0)
-      RA(blocks, sizeof(void *)*(n_blocks + BLOCKS_PER_ALLOC), void *);
-    
-    MA(blocks[n_blocks], block_size, char);
-    n_blocks++;
-    ptr = 0;
     current_block++;
+    if (current_block == n_blocks) {
+      if (n_blocks % BLOCK_LIST_ALLOC_STEP == 0)
+	RA(blocks, sizeof(void *)*(BLOCK_LIST_ALLOC_STEP + n_blocks), void *);
+
+      MA(blocks[n_blocks], sizeof(char)*block_size, char);
+      n_blocks++;
+    }
+
+    ptr = 0;
   }
 
   p = (void *) ((uint64_t) blocks[current_block] + (uint64_t) ptr);
@@ -89,9 +92,10 @@ void mm::recycle() {
 
   /* if more than one block was allocated in last usage, increase the
      blocksize so that a single block would have been enough */
+#if 0
   if (n_blocks > 1) {
     new_blocksize = block_size * n_blocks;
-
+    fprintf(stderr,"Set new blocksize to %1.1f Mb\n", new_blocksize/(double) (1024*1024));
     /* don't allow a blocksize increment to bring it over 16 Mb. Otherwise,
        make sure the new_blocksize is a multiple of the system pagesize */
     if (new_blocksize > 16*1024*1024) {
@@ -99,6 +103,7 @@ void mm::recycle() {
     } else {
       new_blocksize = (new_blocksize | (getpagesize()-1)) + 1;
     }
+    fprintf(stderr,"Set new blocksize to %1.1f Mb\n", new_blocksize/(double) (1024*1024));
 
     if (new_blocksize > block_size) {
       for(i=1;i<n_blocks;i++) free(blocks[i]);
@@ -108,7 +113,8 @@ void mm::recycle() {
       n_blocks = 1;
     }
   }
-
+#endif
+  
   current_block = 0;
   ptr = 0;
 }
@@ -121,13 +127,13 @@ void mm::recycle() {
 mm::~mm() {
   int i;
 
-  for(i=0;i<n_blocks;i++) {
+  for(i=0; i < n_blocks;i++) {
     free(blocks[i]);
     blocks[i] = NULL;
   }
   free(blocks);
+  
   n_blocks = -1;
   current_block = -1;
   ptr = -1;
-
 }
