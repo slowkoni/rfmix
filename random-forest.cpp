@@ -6,6 +6,9 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <float.h>
+#include <math.h>
+
+#include <assert.h>
 
 #include "kmacros.h"
 #include "md5rng.h"
@@ -35,14 +38,17 @@ typedef struct {
 
 typedef struct {
   int idx;
+  int rng_idx;
   int n_snps;
-  snp_t *snps;
+  snp_t *snps;;
 
   int n_query_samples;
   wsample_t *query_samples;
 
   int n_ref_haplotypes;
   int **ref_haplotypes;
+
+  int n_subpops;
   double **current_p;
 } window_t;
 
@@ -54,10 +60,11 @@ typedef struct {
    pre-training of the algorithm and storing the trees in serialized form in
    a file. In version 2 however I do not have plans to actually implement this,
    only to allow adaptation to support it in the future. */
-typedef struct {
+typedef struct node {
   /* snp_id is the index of the SNP that divides decendents into left or right.
      0 goes left, 1 goes right. */
   int snp_id;
+  int level;
   struct node *left;
   struct node *right;
 
@@ -73,46 +80,313 @@ typedef struct {
 } node_t;
 
 typedef struct {
+  int n_subpops;
   md5rng *rng;
+  int rng_idx;
+  int window_idx;
 
+  int n_snps;
   int **haplotypes;
   int n_haplotypes;
-
-  double *p;
-  node_t *root;
-
-  /* These fields are needed during building of the tree, but are not required
-     once the tree is built. */
-  int n_remain;
-  int *remain_q;
-  int n_snps;
-  snp_t **snp_q;
-} tree_t;
+  double **current_p;
   
-/* information that does not change as the tree progresses is in tree_t, except for the
-   est_p field which is the ultimate result of the tree. est_p is merged into est_p in 
-   wsample_t when grow_tree returns from the top most call. The information that changes
-   on every decent call is stored in node_t structs. It is not implemented as a class
-   for the reasons given above, and as a result there is some manual work to create new
-   nodes.*/
-static void grow_tree(tree_t *tree, node_t *node) {
+  node_t *root;
+} tree_t;
 
+static double normalize_vector(double *p, int n) {
+  double p_sum = 0.;
+  for(int i=0; i < n; i++)
+    p_sum += p[i];
+  for(int i=0; i < n; i++)
+    p[i] /= p_sum;
 }
 
-static node_t *add_node(tree_t *tree, mm *ma) {
+static void output_node(FILE *f, node_t *node, int n) {
+
+  if (node->snp_id == -1) {
+    fprintf(f,"(-1,[");
+    fprintf(f,"%1.1f", node->p[0]);
+    for(int k=1; k < n-1; k++)
+      fprintf(f,",%1.1f", node->p[k]);
+    fprintf(f,"])");
+  }
+  else {
+    fprintf(f,"(%d,", node->snp_id);
+    output_node(f, node->left, n);
+    fprintf(f,",");
+    output_node(f, node->right, n);
+    fprintf(f,")");
+  }
+}
+
+static void output_tree(FILE *f, tree_t *tree) {
+  output_node(f, tree->root, tree->n_subpops);
+  fprintf(f,"\n\n");
+}
+
+static void add_current_p(double *p, double *current_p, int n) {
+  for(int k=0; k < n-1; k++) p[k] += current_p[k];
+}
+
+/* Normalizes a probability vector and returns the shannon information - any
+   debug code outputting the value should divide by M_LN2 to report in bits. I
+   am not calling normalize_vector() above because code calling this function
+   does not want p[] modified. */
+static double shannon_information(double *p, int np, int n) {
+ double sum_p = 0.;
+
+  for(int k=0; k < n; k++) 
+    sum_p += p[k];
+
+  double si = 0.;
+  for(int k=0; k < n; k++) {
+    double tmp = p[k]/sum_p;
+    if (tmp > 0.) si += tmp*log(tmp);
+  }
+
+  return -si;    
+}
+
+/* Return the "gini index" of a probabily vector. The vector typically needs to
+   be normalized first but calling code does not want p[] modified so not calling
+   normalize_vector() above. The gini index is a measure of how different p[] is
+   from equal probability among componenets. From what I understand, minimizing
+   the gini index in choosing decisions for the tree is less susceptible to bias
+   toward selecting attributes which uniquely identify single or small number of
+   items among a large number of categories than shannon information */
+static double gini_index(double *p, int n) {
+  double sum_p = 0.;
+
+  for(int k=0; k < n; k++) 
+    sum_p += p[k];
+  
+  double gi = 0.;
+  for(int i=0; i < n; i++) {
+    gi += p[i]/sum_p * p[i]/sum_p;
+  }
+
+  return 1.0 - gi;
+}
+
+/* calculates the sum of the shannon information content of the resulting child 
+   nodes if we split the reference haplotypes remaining <ref_q> on snp <snp>. This
+   function and its caller can also use the gini index for this purpose */
+static double evaluate_snp(double *si, double *n_child, tree_t *tree, int snp, int *ref_q, int n_ref, mm *ma) {
+  int j,k;
+  double p[2][tree->n_subpops];
+  
+  for(int k=0; k < tree->n_subpops; k++) {
+    p[0][k] = 0.;
+    p[1][k] = 0.;
+  }
+  n_child[0] = 0.;
+  n_child[1] = 0.;
+  
+  for(int j=0; j < n_ref; j++) {
+    if (tree->haplotypes[ref_q[j]][snp] == 0) {
+      add_current_p(p[0], tree->current_p[ref_q[j]], tree->n_subpops);
+      n_child[0] += 1.0;
+    }
+    else if (tree->haplotypes[ref_q[j]][snp] == 1) {
+      add_current_p(p[1], tree->current_p[ref_q[j]], tree->n_subpops);
+      n_child[1] += 1.0;
+    }
+    else {
+      /* Missing data code - perhaps we should test explicitly for it? */
+      /* We handle missing data by sending the haplotypes having missing data down
+	 to both child nodes */
+      add_current_p(p[0], tree->current_p[ref_q[j]], tree->n_subpops);
+      add_current_p(p[1], tree->current_p[ref_q[j]], tree->n_subpops);
+      n_child[0] += 0.5;
+      n_child[1] += 0.5;
+    }
+  }
+
+  //  si[0] = gini_index(p[0], tree->n_subpops-1);
+  //  si[1] = gini_index(p[1], tree->n_subpops-1);
+  si[0] = shannon_information(p[0], n_child[0], tree->n_subpops-1);
+  si[1] = shannon_information(p[1], n_child[1], tree->n_subpops-1);
+  
+  return si[0] + si[1];
+}
+
+static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_ref,
+			double si, mm *ma, int level) {
 
   node_t *node = (node_t *) ma->allocate(sizeof(node_t), WHEREFROM);
+  node->p = NULL;
+  node->level = level;
+  
+  /* Terminate recursion if there is only 1 reference haplotype left, no snps left
+     to divide on, or the information content is less than half a bit per haplotype */
+  if (n_snps == 0 || n_ref <= 1) {
+#ifndef DEBUG_L1
+    assert(n_ref != 0);
+#endif
+    node->p = (double *) ma->allocate(sizeof(double)*tree->n_subpops, WHEREFROM);
+    for(int k=0; k < tree->n_subpops; k++)
+      node->p[k] = 0.;
+    for(int i=0; i < n_ref; i++) {
+      for(int k=0; k < tree->n_subpops-1; k++)
+	node->p[k] += tree->current_p[ref_q[i]][k];
+    }
+#ifdef DEBUG_L1
+    /* This should not happen as the termination condition below should be triggered
+       because of lack of a SNP to choose which still results in at least one haplotype
+       in each branch. If we do get here, something is incorrect in the code below */
+    if (n_ref == 0) fprintf(stderr,"N HAPLOTYPES IS ZERO!\n");
+    fprintf(stderr,"Force terminate tree at level %d - %6.1f  %3d snps  %3d haplotypes\n",
+	    level, si, n_snps, n_ref);
+    fprintf(stderr,"[ %4.1f", node->p[0]);
+    for(int k=1; k < tree->n_subpops-1; k++)
+      fprintf(stderr,", %4.1f",node->p[k]);
+    fprintf(stderr," ]\n");
+#endif
+    
+    node->left = NULL;
+    node->right = NULL;
+    node->snp_id = -1;
+    return node;
+  }
+
+  /* In original version 1 RFMIX, the number of SNPs which are randomly evaluated from
+     the total number remaining is some fraction, called the mtry factor, which defaults
+     to 1/sqrt(2) of those SNPs remaining. This was a parameter of the original program
+     but is currently fixed here. All SNPs should not be evaluated, or the only randomness
+     in the tree is due to bootstrap selection of haplotypes */
+  int n_try = n_snps * M_SQRT1_2;
+  if (n_try < 1) n_try = 1;
+
+  /* Randomly permute the array of SNPs, then evaluate the first n_try of them. The random
+     number generator is key'd to the window index for repeatability of runs on the same
+     input with multithreading enabled */
+  for(int i=0; i < n_snps; i++) {
+    int j = tree->rng->uniform_int(RFOREST_RNG_KEY, tree->window_idx, tree->rng_idx++, 0, n_snps);
+    int tmp = snp_q[i];
+    snp_q[i] = snp_q[j];
+    snp_q[j] = tmp;
+  }
+
+  int best_snp = -1;
+  double best_split = DBL_MAX;;
+  double child_si[2];
+  double best_si[2];
+  double child_n[2];
+  for(int i=0; i < n_try; i++) {
+    int snp = snp_q[i];
+
+    double split_information = evaluate_snp(child_si, child_n, tree, snp, ref_q, n_ref, ma);
+    if (split_information < best_split && child_n[0] >= 1. && child_n[1] >= 1.) {
+#if DEBUG_L2
+      fprintf(stderr,"level %d - try %3d/%3d/%3d  split %6.3f in %6.3f,%6.3f  parent %6.3f  %6.3f\n", level,
+	      i, n_try, n_snps, split_information, child_si[0], child_si[1],si, split_information - si);
+#endif
+      best_snp = i;
+      best_si[0] = child_si[0];
+      best_si[1] = child_si[1];
+      best_split = split_information;      
+    }
+  }
+
+  /* If no SNP was selected, then no division is possible with the n_try SNPs evaluated such 
+     that both branches have at least one haplotype, with the n_try SNPs evaluated. This
+     terminates the tree at this node. */
+  if (best_snp == -1) {
+    node->p = (double *) ma->allocate(sizeof(double)*tree->n_subpops, WHEREFROM);
+    for(int k=0; k < tree->n_subpops; k++)
+      node->p[k] = 0.;
+    for(int i=0; i < n_ref; i++) {
+      for(int k=0; k < tree->n_subpops-1; k++)
+	node->p[k] += tree->current_p[ref_q[i]][k];
+    }
+    normalize_vector(node->p, tree->n_subpops-1);
+    
+#ifdef DEBUG_L2
+    fprintf(stderr,"Terminate tree at level %d\n", level);
+    fprintf(stderr,"[ %4.1f", node->p[0]);
+    for(int k=1; k < tree->n_subpops-1; k++)
+      fprintf(stderr,", %4.1f",node->p[k]);
+    fprintf(stderr," ]\n");
+#endif
+    
+    node->left = NULL;
+    node->right = NULL;
+    node->snp_id = -1;
+    return node;
+  }
+
+  /* Normal condition - we divide the haplotypes based on SNP snp_q[best_snp] */
+  node->snp_id = snp_q[best_snp];
+  
+  int *child_ref_q[2];
+  int child_n_ref[2];
+  
+  for(int j=0; j < 2; j++) child_n_ref[j] = 0;
+  for(int i=0; i < n_ref; i++) {
+    if (tree->haplotypes[ref_q[i]][snp_q[best_snp]] == 0) {
+      child_n_ref[0]++;
+    }
+    else if (tree->haplotypes[ref_q[i]][snp_q[best_snp]] == 1) {
+      child_n_ref[1]++;
+    }
+    else {
+      child_n_ref[0]++;
+      child_n_ref[1]++;
+    }
+  }
+
+  for(int j=0; j < 2; j++) {
+    child_ref_q[j] = (int *) ma->allocate(sizeof(int)*(child_n_ref[j]+1), WHEREFROM);
+    child_n_ref[j] = 0;
+  }
+  for(int i=0; i < n_ref; i++) {
+    if (tree->haplotypes[ref_q[i]][snp_q[best_snp]] == 0) {
+      child_ref_q[0][child_n_ref[0]++] = ref_q[i];
+    }
+    else if (tree->haplotypes[ref_q[i]][snp_q[best_snp]] == 1) {
+      child_ref_q[1][child_n_ref[1]++] = ref_q[i];
+    }
+    else {
+      /* Missing data results in the haplotype going down both branches */
+      child_ref_q[0][child_n_ref[0]++] = ref_q[i];
+      child_ref_q[1][child_n_ref[1]++] = ref_q[i];
+    }
+  }
+
+  /* Move the selected SNP to the end of the queue. We'll tell the child calls the 
+     queue is one shorter. Note that this automatically makes the SNP selected at 
+     this level available again for selection when this function returns, meaning
+     higher levels in the tree that start going down the right branch can use it
+     to divide the haplotypes that went that way. */
+  int tmp = snp_q[best_snp];
+  snp_q[best_snp] = snp_q[n_snps-1];
+  snp_q[n_snps-1] = tmp;
+
+  node->left = add_node(tree, snp_q, n_snps-1, child_ref_q[0], child_n_ref[0], best_si[0], ma, level+1);
+  node->right = add_node(tree, snp_q, n_snps-1, child_ref_q[1], child_n_ref[1], best_si[1], ma, level+1);
+  
   return node;
 }
 
+/* An essential part of the random forest method is that each tree has a "bootstrapped" random 
+   selection, with replacement, of haplotypes. Some haplotypes may be represented 2 or more 
+   times, others none, but which ones are different for each tree. This will produce different
+   decisions in each tree, as well as that of the random evaluation of only some of the 
+   available SNPs to make a division on. This is to reduce over-fitting to characteristics of 
+   the reference data which are not real characteristics of the population they are sampled 
+   from but rather artifacts of the random sampling process. This is like how the mean of a
+   randomly drawn sample estimates, but typically does not equal, the mean of the entire
+   population. */
 static void bootstrap_haplotypes(tree_t *tree, window_t *window, mm *ma) {
   int i;
 
   tree->haplotypes = (int **) ma->allocate(sizeof(int *)*window->n_ref_haplotypes, WHEREFROM);
+  tree->current_p = (double **) ma->allocate(sizeof(double *)*window->n_ref_haplotypes, WHEREFROM);
   for(i=0; i < window->n_ref_haplotypes; i++) {
-    int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, i, 0, window->n_ref_haplotypes);
+    int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx++, 0, window->n_ref_haplotypes);
 
     tree->haplotypes[i] = window->ref_haplotypes[j];
+    tree->current_p[i] = window->current_p[j];
   }
   tree->n_haplotypes = i;
 }
@@ -121,22 +395,95 @@ static tree_t *build_tree(window_t *window, md5rng *rng, mm *ma) {
   int i;
   tree_t *tree = (tree_t *) ma->allocate(sizeof(tree_t), WHEREFROM);
 
+  /* Because we are not going to pass the window to the functions that build the
+     tree, these variables are going to be copied to the tree structure. All but
+     n_subpops are not essential properties of the tree built */
+  tree->window_idx = window->idx,
+  tree->n_subpops = window->n_subpops;
   tree->rng = rng;
-  
+  tree->rng_idx = window->rng_idx;
+
+  /* Randomly select, with replacement, reference haplotypes for this tree. See above. */
   bootstrap_haplotypes(tree, window, ma);
-  tree->remain_q = (int *) ma->allocate(sizeof(int)*tree->n_haplotypes, WHEREFROM);
+  int *ref_q = (int *) ma->allocate(sizeof(int)*tree->n_haplotypes, WHEREFROM);
   for(i=0; i < tree->n_haplotypes; i++)
-    tree->remain_q[i] = i;
-  tree->n_remain = tree->n_haplotypes;
+    ref_q[i] = i;
 
-  tree->snp_q = (snp_t **) ma->allocate(sizeof(snp_t *)*window->n_snps, WHEREFROM);
+  /* All SNPs in the RF window are candidates, only a random subsample are evaluated
+     at each node. See add_node() above. */
+  int *snp_q = (int *) ma->allocate(sizeof(int)*window->n_snps, WHEREFROM);
   for(i=0; i < window->n_snps; i++)
-    tree->snp_q[i] = window->snps + i;
-  tree->n_snps = window->n_snps;
-  
-  tree->root = add_node(tree, ma);
+    snp_q[i] = i;
 
+  /* Initialize the shannon information of all bootstrap-selected reference haplotypes
+     present at the start (root node) of the tree, and build the tree */
+  double p[window->n_subpops-1];
+  for(int k=0; k < window->n_subpops-1; k++)
+    p[k] = 0.;
+  for(i=0; i < tree->n_haplotypes; i++) {
+    for(int k=0; k < window->n_subpops-1; k++)
+      p[k] += tree->current_p[i][k];
+  }
+  double si = shannon_information(p, tree->n_haplotypes, window->n_subpops);
+  tree->root = add_node(tree, snp_q, window->n_snps, ref_q, tree->n_haplotypes,
+			si, ma, 0);
+
+  /* The random number generator sequence index is increased during tree building, copy
+     the incremented value back to the window */
+  window->rng_idx = tree->rng_idx;
   return tree;
+}
+
+static void evaluate_tree(double *p, int *d, int *haplotype, node_t *node, int n_subpops) {
+  
+  if (node->snp_id == -1) {
+    for(int k=0; k < n_subpops-1; k++)
+      p[k] += node->p[k];
+    (*d)++;
+    return;
+  }
+  
+  int allele = haplotype[node->snp_id];
+  if (allele == 0)
+    evaluate_tree(p, d, haplotype, node->left, n_subpops);
+  else if (allele == 1)
+    evaluate_tree(p, d, haplotype, node->right, n_subpops);
+  else if (allele == 2) {
+    evaluate_tree(p, d, haplotype, node->left, n_subpops);
+    evaluate_tree(p, d, haplotype, node->right, n_subpops);
+  }
+}
+
+static void evaluate_sample(wsample_t *wsample, window_t *window, tree_t **trees, int n_trees) {
+  
+  for(int h=0; h < 4; h++) {
+    for(int t=0; t < n_trees; t++) {
+      double p[window->n_subpops-1];
+      for(int k=0; k < window->n_subpops-1; k++) p[k] = 0.;
+      
+      /* This is tricky - because of missing data, some trees might add the terminal node p vector
+	 of several nodes, not just one. d is incremented by evaluate_tree() at every terminal 
+	 node that it adds to p[]. After the return of the call below, we then merge the p vector
+	 into est_p[h][] and divide it by the number of terminal nodes that were used by the tree.
+	 This is necessary otherwise trees where missing data results in multiple terminal nodes
+	 being used would in effect have a higher weight where fewer (one ideally) terminal 
+         nodes were reached. */
+      int d = 0;
+      evaluate_tree(p, &d, wsample->haplotype[h], trees[t]->root, window->n_subpops);
+
+      for(int k=0; k < window->n_subpops-1; k++) wsample->est_p[h][k] += p[k]/(double) d;
+    }
+
+    /* Normalize to probabilities that sum to one across all subpops. */
+    normalize_vector(wsample->est_p[h], window->n_subpops-1);
+#if DEBUG_L2
+    fprintf(stderr,"window %d sample %d haplotype %d - %4.2f", window->idx, wsample->sample_idx,
+	    h, wsample->est_p[h][0]);
+    for(int k=1; k < window->n_subpops-1; k++)
+      fprintf(stderr, ", %4.2f", wsample->est_p[h][k]);
+    fprintf(stderr,"\n");
+#endif
+  }
 }
 
 /* Unpacks alleles from sample_t haplotypes into a copy here in ints (for speed) and
@@ -197,7 +544,7 @@ static void *random_forest_thread(void *targ) {
   window_t window;
   int i;
   
-  mm *ma = new mm(2, WHEREFROM);
+  mm *ma = new mm(16, WHEREFROM);
   
   window.n_query_samples = 0;
   window.n_ref_haplotypes = 0;
@@ -244,10 +591,15 @@ static void *random_forest_thread(void *targ) {
       crf_window_t *crf = input->crf_windows + w;
       
     /* set up window_t object and decoded/unpacked information from the input_t object */
+      window.n_subpops = input->n_subpops;
       window.idx = w;
+      window.rng_idx = 1;
       window.n_snps = crf->rf_end_idx - crf->rf_start_idx + 1;
       window.snps = input->snps + crf->rf_start_idx;
-
+#ifdef DEBUG_L1
+      fprintf(stderr,"window %d  %d snps   %d to %d\n", window.idx, window.n_snps, crf->rf_start_idx,
+	      crf->rf_end_idx);
+#endif
       int q = 0;
       int r = 0;
       for(i=0; i < input->n_samples; i++) {
@@ -263,16 +615,25 @@ static void *random_forest_thread(void *targ) {
 	}
       }
 
-    /* Call window function to process the window */
-
+      /* Call window function to process the window */
+      
       /* Build trees */
       tree_t **trees = (tree_t **) ma->allocate(sizeof(tree_t *)*rfmix_opts.n_trees, WHEREFROM);
-      for(i=0; i < rfmix_opts.n_trees; i++) {
+      for(i=0; i < rfmix_opts.n_trees; i++)
 	trees[i] = build_tree(&window, args->rng, ma);
-      }
-      /* evaluate trees */
+
+#if 0
+      pthread_mutex_lock(&args->lock);
+      for(i=0; i < rfmix_opts.n_trees; i++) 
+	output_tree(stdout, trees[i]);
+      pthread_mutex_unlock(&args->lock);
+#endif
       
-    /* Repack window_t object results into input_t and reset/reinitialize window_t 
+      /* evaluate trees */
+      for(i=0; i < window.n_query_samples; i++)
+	evaluate_sample(window.query_samples + i, &window, trees, rfmix_opts.n_trees);
+
+	/* Repack window_t object results into input_t and reset/reinitialize window_t 
        for next window */
       for(i=0; i < window.n_query_samples; i++) {
 	wsample_t *wsample = window.query_samples + i;
