@@ -35,6 +35,7 @@ typedef struct {
   char *class_fname;
   char *output_basename;
 
+  double maximum_missing_data_freq;
   int rf_window_size;
   int crf_spacing;
   int generations;

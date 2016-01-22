@@ -16,6 +16,8 @@ extern rfmix_opts_t rfmix_opts;
 #define SAMPLE_ALLOC_STEP (256)
 #define SNP_ALLOC_STEP (16384)
 
+#define VCF_LEAD_COLS (9)
+
 /* Reads through and ignores all VCF header lines and returns the sample header line */
 static char *vcf_skip_headers(Inputline *vcf) {
   char *p;
@@ -30,6 +32,18 @@ static char *vcf_skip_headers(Inputline *vcf) {
     exit(-1);
   }
   return p;
+}
+
+static int8_t get_allele(char q) {
+  switch(q) {
+  case '0':
+    return 0;
+  case '1':
+    return 1;
+  case '.':
+  default:
+    return 2;
+  }
 }
 
 static void load_samples(input_t *input) {
@@ -101,7 +115,6 @@ static void load_samples(input_t *input) {
     }
     /* Whether just added or found, the reference subpop index is i */
     ref_idx = i;
-
     if (n_samples % SAMPLE_ALLOC_STEP == 0)
       RA(samples, sizeof(sample_t)*(SAMPLE_ALLOC_STEP + n_samples), sample_t);
 	
@@ -149,6 +162,66 @@ static void skip_to_chromosome(Inputline *vcf, char *chm) {
   exit(-1);
 }
 
+/* Parses up a VCF genotype line and computes the minor allele frequency as well as 
+   the proportion of missing data. This will be used to determine whether a SNP 
+   should be included in the input.
+
+   Afterthoughts: This functionality was added out of necessity after discovering that
+                  large amounts of missing data in the input at SNPs caused serious
+		  ambiguity in the estimation of ancestry at that CRF window. The
+		  function duplicates code with parse_alleles() and a refactoring 
+		  should consider combining the functions, loading the alleles
+		  into a temporary array with this function just counting the alleles
+		  in the temporary array, and parse_alleles() copying the alleles
+		  into the haplotypes arrays, both calling the same function that
+		  actually parses up the genotypes. */
+static double vcf_snp_maf(int *r_mac, double *r_miss, char *p) {
+  char *q;
+  int n_total = 0;
+  int n_obs = 0;
+  double ref_freq = 0.;
+  
+  int col_idx = VCF_LEAD_COLS;
+  while((q = strsep(&p, "\t")) != NULL) {
+
+    /* We are going to skip errors at this stage, they will be reported later when
+       loading alleles. Errors will count as missing data since alleles can not be
+       parsed from the genotype. If missing data is high the snp may simply be 
+       excluded in which case we need not care about the errors later */
+    if (strlen(q) < 2) {
+      n_total += 2;
+      continue;
+    }
+
+    /* NOTE: perhaps unphased genotypes should be treated as missing data and we
+             should detect and count them as such here. Currently the allele 
+	     loading code just loads the alleles if they were phased but prints
+	     a warning */
+    if (get_allele(q[0]) == 0) {
+      ref_freq += 1.0;
+      n_obs++;
+    } else if (get_allele(q[0]) == 1) {
+      n_obs++;
+    }
+    n_total++;
+
+    if (get_allele(q[2]) == 0) {
+      ref_freq += 1.0;
+      n_obs++;
+    } else if (get_allele(q[2]) == 1) {
+      n_obs++;
+    }
+    n_total++;
+
+  }
+  
+  *r_mac = ref_freq < n_obs - ref_freq ? ref_freq : n_obs - ref_freq;
+  ref_freq /= n_obs;
+  *r_miss = (n_total - n_obs) / (double) n_total;
+
+  return *r_mac /(double) n_obs;
+}
+
 /* Grabs the next SNP line from a VCF and returns the chromosome, position, and the snp line
    pointing to the next field past the position */
 static char *get_next_snp(Inputline *vcf, char **chm, int *pos) {
@@ -164,12 +237,17 @@ static char *get_next_snp(Inputline *vcf, char **chm, int *pos) {
   char *q = strsep(&p, "\t");
 
   *pos = atoi(q);
+
+  int col_idx = 2;
+  while(col_idx < VCF_LEAD_COLS) { strsep(&p, "\t"); col_idx++; }
+
   return p;
 }
 
 static void identify_common_snps(input_t *input) {
   char *qvcf_sample_header, *rvcf_sample_header;
-
+  char *pq, *pr;
+  
   Inputline *qvcf = new Inputline(rfmix_opts.qvcf_fname);
   vcf_skip_headers(qvcf);
   skip_to_chromosome(qvcf, rfmix_opts.chromosome);
@@ -183,21 +261,40 @@ static void identify_common_snps(input_t *input) {
   char *q_chm, *r_chm;
   int q_pos, r_pos;
   
-  get_next_snp(qvcf, &q_chm, &q_pos);
-  get_next_snp(rvcf, &r_chm, &r_pos);
+  pq = get_next_snp(qvcf, &q_chm, &q_pos);
+  pr = get_next_snp(rvcf, &r_chm, &r_pos);
 
+  double maf, miss;
+  int mac;
   for(;;) {
     while(q_pos != -1 && strcmp(q_chm, rfmix_opts.chromosome) == 0 &&
 	  q_pos < r_pos)
-      get_next_snp(qvcf, &q_chm, &q_pos);
+      pq = get_next_snp(qvcf, &q_chm, &q_pos);
     if (q_pos == -1 || strcmp(q_chm, rfmix_opts.chromosome) != 0) break;
 
     while(r_pos != -1 && strcmp(r_chm, rfmix_opts.chromosome) == 0 &&
 	  r_pos < q_pos)
-      get_next_snp(rvcf, &r_chm, &r_pos);
+      pr = get_next_snp(rvcf, &r_chm, &r_pos);
     if (r_pos == -1 || strcmp(r_chm, rfmix_opts.chromosome) != 0) break;
 
     if (q_pos == r_pos) {
+      /* Discard SNPs with too much missing data in either the query or the
+	 reference files. If desired, insert minor allele frequency or minor
+         allele count filters here */
+      maf = vcf_snp_maf(&mac, &miss, pq);
+      if (miss > rfmix_opts.maximum_missing_data_freq) {
+	pq = get_next_snp(qvcf, &q_chm, &q_pos);      
+	pr = get_next_snp(rvcf, &r_chm, &r_pos);
+	continue;
+      }
+
+      maf = vcf_snp_maf(&mac, &miss, pr);
+      if (miss > rfmix_opts.maximum_missing_data_freq) {
+	pq = get_next_snp(qvcf, &q_chm, &q_pos);      
+	pr = get_next_snp(rvcf, &r_chm, &r_pos);
+	continue;
+      }
+      
       if (n_snps % SNP_ALLOC_STEP == 0)
 	RA(snps, sizeof(snp_t)*(n_snps + SNP_ALLOC_STEP), snp_t);
       snps[n_snps].pos = q_pos;
@@ -205,8 +302,8 @@ static void identify_common_snps(input_t *input) {
       snps[n_snps].crf_index = -1;
       n_snps++;
 
-      get_next_snp(qvcf, &q_chm, &q_pos);      
-      get_next_snp(rvcf, &r_chm, &r_pos);
+      pq = get_next_snp(qvcf, &q_chm, &q_pos);      
+      pr = get_next_snp(rvcf, &r_chm, &r_pos);
     }
   }
 
@@ -217,7 +314,6 @@ static void identify_common_snps(input_t *input) {
   delete rvcf;
 }
 
-#define VCF_LEAD_COLS (9)
 typedef struct {
   int col;
   char *sample_id; // NOTE: not a sample_id if leading VCF cols
@@ -249,18 +345,6 @@ static int vcf_parse_column_header(vcf_column_map_t **rcolumn_map, char *column_
   return n_cols;
 }
 
-static int8_t get_allele(char q) {
-  switch(q) {
-  case '0':
-    return 0;
-  case '1':
-    return 1;
-  case '.':
-  default:
-    return 2;
-  }
-}
-
 static void parse_alleles(input_t *input, Inputline *vcf, vcf_column_map_t *column_map,
 			  int n_cols) {
   char *p, *q;
@@ -273,9 +357,7 @@ static void parse_alleles(input_t *input, Inputline *vcf, vcf_column_map_t *colu
 	strcmp(chm, rfmix_opts.chromosome) == 0) {
     if (input->snps[snp_idx].pos != pos) continue;
 
-    int col_idx = 2;
-    while(col_idx < VCF_LEAD_COLS) { strsep(&p, "\t"); col_idx++; }
-
+    int col_idx = VCF_LEAD_COLS;
     while(col_idx < n_cols && (q = strsep(&p, "\t")) != NULL) {
       if (column_map[col_idx].sample_idx == -1) {
 	col_idx++;
@@ -336,7 +418,7 @@ static void set_crf_points(input_t *input) {
   /* Determine the number of defined CRF points we have (CRF windows), the
      central SNP that defines each one, and the boundaries of the larger
      window used to source SNPs for the random forest classification */
-  fprintf(stderr,"\n\tsetting up CRF points and random forest windows... ");
+  fprintf(stderr,"\n   setting up CRF points and random forest windows... ");
   input->n_windows = input->n_snps / rfmix_opts.crf_spacing;
   MA(input->crf_windows, sizeof(crf_window_t)*input->n_windows, crf_window_t);
 
@@ -346,9 +428,10 @@ static void set_crf_points(input_t *input) {
     input->crf_windows[i].snp_idx = j;
 
     rf_start = j - rfmix_opts.rf_window_size / 2;
-    if (rf_start < 0) rf_start = 0;
 
     rf_end = rf_start + rfmix_opts.rf_window_size - 1;
+    if (rf_start < 0) rf_start = 0;
+
     if (rf_end >= input->n_snps) {
       rf_end = input->n_snps - 1;
       rf_start = rf_end - rfmix_opts.rf_window_size + 1;
@@ -366,7 +449,7 @@ static void set_crf_points(input_t *input) {
      individuals, and just initialized to zero for all query individuals. These are
      calculated at each EM iteration by the Forward-Backward algorithm in the
      conditional random field code */
-  fprintf(stderr,"\tinitializing apriori reference subpop across CRF... ");
+  fprintf(stderr,"   initializing apriori reference subpop across CRF... ");
   for(int k=0; k < input->n_samples; k++) {
     sample_t *sample = input->samples + k;
 
@@ -389,7 +472,7 @@ static void set_crf_points(input_t *input) {
   }
   fprintf(stderr,"done\n");
 
-  fprintf(stderr,"\tsetting up random forest probability estimation arrays... ");
+  fprintf(stderr,"   setting up random forest probability estimation arrays... ");
   for(int k=0; k < input->n_samples; k++) {
     sample_t *sample = input->samples + k;
 
@@ -411,15 +494,15 @@ input_t *load_input(void) {
   input->genetic_map = new GeneticMap();
   input->genetic_map->load_map(rfmix_opts.genetic_fname, rfmix_opts.chromosome);
   fprintf(stderr,"done\n");
-  
-  fprintf(stderr,"Scanning input VCFs for common SNPs on chromosome %s ...   ", rfmix_opts.chromosome);
-  identify_common_snps(input);
-  fprintf(stderr,"%d SNPs\n", input->n_snps);
 
-  /* Find and map out all the samples that we will be loading */
+    /* Find and map out all the samples that we will be loading */
   fprintf(stderr,"Mapping samples ... ");
   load_samples(input);
   fprintf(stderr,"%d samples combined\n", input->n_samples);
+
+  fprintf(stderr,"Scanning input VCFs for common SNPs on chromosome %s ...   ", rfmix_opts.chromosome);
+  identify_common_snps(input);
+  fprintf(stderr,"%d SNPs\n", input->n_snps);
   
   /* Now we know all the samples that we will be loading, and all the SNPs,
      allocate the space to store the haplotypes */
@@ -434,7 +517,7 @@ input_t *load_input(void) {
 
   fprintf(stderr,"Defining and initializing conditional random field...  ");
   set_crf_points(input);
-  fprintf(stderr,"done\n");
+  fprintf(stderr,"Defining and initializing conditional random field...   done\n");
   
   return input;
 }
