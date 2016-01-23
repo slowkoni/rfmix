@@ -426,6 +426,8 @@ static void set_crf_points(input_t *input) {
   int j = rfmix_opts.crf_spacing / 2;
   for(int i=0; i < input->n_windows; i++,j += rfmix_opts.crf_spacing) {
     input->crf_windows[i].snp_idx = j;
+    input->crf_windows[i].genetic_pos = input->snps[j].genetic_pos / 100.;
+      // input->genetic_map->translate_seqpos(input->snps[j].pos) / 100.;
 
     rf_start = j - rfmix_opts.rf_window_size / 2;
 
@@ -452,7 +454,7 @@ static void set_crf_points(input_t *input) {
   fprintf(stderr,"   initializing apriori reference subpop across CRF... ");
   for(int k=0; k < input->n_samples; k++) {
     sample_t *sample = input->samples + k;
-
+    
     for(int h=0; h < 2; h++) {
       MA(sample->current_p[h], sizeof(int8_t *)*input->n_windows, int8_t *);
       MA(sample->current_p[h][0], sizeof(int8_t)*input->n_windows*input->n_subpops, int8_t)
@@ -477,6 +479,10 @@ static void set_crf_points(input_t *input) {
     sample_t *sample = input->samples + k;
 
     for(int h=0; h < 4; h++) {
+      MA(sample->msp[h], sizeof(int8_t)*input->n_windows, int8_t);
+      for(int i=0; i < input->n_windows; i++)
+	sample->msp[h][i] = sample->apriori_subpop - 1;
+
       MA(sample->est_p[h], sizeof(int8_t *)*input->n_windows, int8_t *);
       MA(sample->est_p[h][0], sizeof(int8_t)*input->n_windows*input->n_subpops, int8_t);
       for(int i=1; i < input->n_windows; i++)

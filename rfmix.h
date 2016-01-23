@@ -64,6 +64,7 @@ typedef struct {
   int snp_idx;
   int rf_start_idx;
   int rf_end_idx;
+  double genetic_pos;
 } crf_window_t;
 
 typedef struct {
@@ -77,6 +78,7 @@ typedef struct {
   char *sample_id;
   int apriori_subpop; // 0 means query/admixed/unknown sample. 1 through K, reference sample
   int8_t *haplotype[2];
+  int8_t *msp[4];
   int8_t **current_p[2]; // current estimate of probability of subpop [hap][crf_window][subpop]
   int8_t **est_p[4]; // new estimate of probability of subpop estimate [hap][crf_window][subpop]
 } sample_t;
@@ -94,7 +96,7 @@ typedef struct {
   
   int n_windows;
   crf_window_t *crf_windows;
-  
+
   GeneticMap *genetic_map;
 } input_t;
 
