@@ -215,12 +215,12 @@ static void *crf_thread(void *targ) {
     pthread_mutex_unlock(&args->lock);
 
     for(int i=start_sample; i < end_sample; i++) {
-      if (input->samples[i].apriori_subpop != 0) continue;
+      if (input->samples[i].apriori_subpop != -1) continue;
       for(int h=0; h < 4; h++) {
 	viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
-		input->n_subpops-1, ma);
+		input->n_subpops, ma);
 	forward_backward(input->samples + i, h, input->crf_windows, input->n_windows,
-			 input->n_subpops-1, ma);
+			 input->n_subpops, ma);
       }
     }
 
@@ -258,7 +258,7 @@ void crf(input_t *input) {
 
 #if 0
   for(int i=0; i < input->n_samples; i++) {
-    if (input->samples[i].apriori_subpop !=0) continue;
+    if (input->samples[i].apriori_subpop != -1) continue;
     for(int j=0; j < input->n_windows; j++) {
       fprintf(stderr,"sample %20.20s window %6d -", input->samples[i].sample_id, j);
       for(int h=0; h < 4; h++)
@@ -267,15 +267,16 @@ void crf(input_t *input) {
     }
   }
 #endif
-#if 0
-  int n_subpops = input->n_subpops - 1;
+#if 1
+  int n_subpops = input->n_subpops;
   for(int i=0; i < input->n_samples; i++) {
-    if (input->samples[i].apriori_subpop !=0) continue;
+    if (input->samples[i].apriori_subpop != -1) continue;
     for(int h=0; h < 2; h++) {
       for(int j=0; j < input->n_windows; j++) {
-	fprintf(stderr,"sample %20.20s haplotype %d window %6d -", input->samples[i].sample_id, h, j);
-	for(int k=0; k < input->n_subpops-1; k++) 
-	  fprintf(stderr,"\t%g", DF16(input->samples[i].current_p[h][ IDX(j,k) ]));
+	fprintf(stderr,"sample %20.20s haplotype %d window %6d - %d", input->samples[i].sample_id, h, j,
+		input->samples[i].msp[h][j]);
+	for(int k=0; k < input->n_subpops; k++) 
+	  fprintf(stderr,"\t%1.5f", DF16(input->samples[i].current_p[h][ IDX(j,k) ]));
 	fprintf(stderr,"\n");
       }
     }

@@ -51,9 +51,8 @@ static void load_samples(input_t *input) {
   int n_samples, i, ref_idx, *tmp;
   char *sample_id, *reference_pop, *p;
 
-  MA(input->reference_subpops, sizeof(char *)*SUBPOP_ALLOC_STEP, char *);
-  input->reference_subpops[0] = strdup("query");
-  input->n_subpops = 1;
+  input->reference_subpops = NULL;
+  input->n_subpops = 0;
   
   /* This will be used to rapidly locate a sample when matching the reference VCF file 
      to the sample ids loaded from the sample map file. Any sample_id found in the VCF
@@ -79,7 +78,7 @@ static void load_samples(input_t *input) {
       RA(samples, sizeof(sample_t)*(SAMPLE_ALLOC_STEP + n_samples), sample_t);
 	
     samples[n_samples].sample_id = strdup(sample_id);
-    samples[n_samples].apriori_subpop = 0;
+    samples[n_samples].apriori_subpop = -1;
 
     MA(tmp, sizeof(int), int);
     *tmp = n_samples;
@@ -417,7 +416,7 @@ static void load_alleles(input_t *input) {
 static void set_crf_points(input_t *input) {
 
   /* Local variable is needed for IDX(window,subpop) macro */
-  int n_subpops = input->n_subpops - 1;
+  int n_subpops = input->n_subpops;
   
   /* Determine the number of defined CRF points we have (CRF windows), the
      central SNP that defines each one, and the boundaries of the larger
@@ -467,8 +466,8 @@ static void set_crf_points(input_t *input) {
 	for(int s=0; s < n_subpops; s++)
 	  sample->current_p[h][ IDX(i,s) ] = (int16_t) -32767;
 	  
-	if (sample->apriori_subpop != 0)
-	  sample->current_p[h][ IDX(i,sample->apriori_subpop-1) ] = (int16_t) 32767;
+	if (sample->apriori_subpop != -1)
+	  sample->current_p[h][ IDX(i,sample->apriori_subpop) ] = (int16_t) 32767;
       }
     }
   }
@@ -481,7 +480,7 @@ static void set_crf_points(input_t *input) {
     for(int h=0; h < 4; h++) {
       MA(sample->msp[h], sizeof(int8_t)*input->n_windows, int8_t);
       for(int i=0; i < input->n_windows; i++)
-	sample->msp[h][i] = sample->apriori_subpop - 1;
+	sample->msp[h][i] = sample->apriori_subpop;
 
       MA(sample->est_p[h], sizeof(int8_t *)*input->n_windows, int8_t *);
       MA(sample->est_p[h][0], sizeof(int8_t)*input->n_windows*input->n_subpops, int8_t);

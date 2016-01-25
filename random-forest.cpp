@@ -208,10 +208,10 @@ static double evaluate_snp(double *si, double *n_child, tree_t *tree, int snp, i
     }
   }
 
-  //  si[0] = gini_index(p[0], tree->n_subpops-1);
-  //  si[1] = gini_index(p[1], tree->n_subpops-1);
-  si[0] = shannon_information(p[0], n_child[0], tree->n_subpops-1);
-  si[1] = shannon_information(p[1], n_child[1], tree->n_subpops-1);
+  //  si[0] = gini_index(p[0], tree->n_subpops);
+  //  si[1] = gini_index(p[1], tree->n_subpops);
+  si[0] = shannon_information(p[0], n_child[0], tree->n_subpops);
+  si[1] = shannon_information(p[1], n_child[1], tree->n_subpops);
   
   return (si[0] + si[1])/2.0;
 }
@@ -233,7 +233,7 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
     for(int k=0; k < tree->n_subpops; k++)
       node->p[k] = 0.;
     for(int i=0; i < n_ref; i++) {
-      for(int k=0; k < tree->n_subpops-1; k++)
+      for(int k=0; k < tree->n_subpops; k++)
 	node->p[k] += tree->current_p[ref_q[i]][k];
     }
 #ifdef DEBUG_L1
@@ -244,7 +244,7 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
     fprintf(stderr,"Force terminate tree at level %d - %6.1f  %3d snps  %3d haplotypes\n",
 	    level, si, n_snps, n_ref);
     fprintf(stderr,"[ %4.1f", node->p[0]);
-    for(int k=1; k < tree->n_subpops-1; k++)
+    for(int k=1; k < tree->n_subpops; k++)
       fprintf(stderr,", %4.1f",node->p[k]);
     fprintf(stderr," ]\n");
 #endif
@@ -303,15 +303,15 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
     for(int k=0; k < tree->n_subpops; k++)
       node->p[k] = 0.;
     for(int i=0; i < n_ref; i++) {
-      for(int k=0; k < tree->n_subpops-1; k++)
+      for(int k=0; k < tree->n_subpops; k++)
 	node->p[k] += tree->current_p[ref_q[i]][k];
     }
-    normalize_vector(node->p, tree->n_subpops-1);
+    normalize_vector(node->p, tree->n_subpops);
     
 #ifdef DEBUG_L2
     fprintf(stderr,"Terminate tree at level %d\n", level);
     fprintf(stderr,"[ %4.1f", node->p[0]);
-    for(int k=1; k < tree->n_subpops-1; k++)
+    for(int k=1; k < tree->n_subpops; k++)
       fprintf(stderr,", %4.1f",node->p[k]);
     fprintf(stderr," ]\n");
 #endif
@@ -424,11 +424,11 @@ static tree_t *build_tree(window_t *window, md5rng *rng, mm *ma) {
 
   /* Initialize the shannon information of all bootstrap-selected reference haplotypes
      present at the start (root node) of the tree, and build the tree */
-  double p[window->n_subpops-1];
-  for(int k=0; k < window->n_subpops-1; k++)
+  double p[window->n_subpops];
+  for(int k=0; k < window->n_subpops; k++)
     p[k] = 0.;
   for(i=0; i < tree->n_haplotypes; i++) {
-    for(int k=0; k < window->n_subpops-1; k++)
+    for(int k=0; k < window->n_subpops; k++)
       p[k] += tree->current_p[i][k];
   }
   double si = shannon_information(p, tree->n_haplotypes, window->n_subpops);
@@ -444,7 +444,7 @@ static tree_t *build_tree(window_t *window, md5rng *rng, mm *ma) {
 static void evaluate_tree(double *p, int *d, int *haplotype, node_t *node, int n_subpops) {
   
   if (node->snp_id == -1) {
-    for(int k=0; k < n_subpops-1; k++)
+    for(int k=0; k < n_subpops; k++)
       p[k] += node->p[k];
     (*d)++;
     return;
@@ -465,8 +465,8 @@ static void evaluate_sample(wsample_t *wsample, window_t *window, tree_t **trees
   
   for(int h=0; h < 4; h++) {
     for(int t=0; t < n_trees; t++) {
-      double p[window->n_subpops-1];
-      for(int k=0; k < window->n_subpops-1; k++) p[k] = 0.;
+      double p[window->n_subpops];
+      for(int k=0; k < window->n_subpops; k++) p[k] = 0.;
       
       /* This is tricky - because of missing data, some trees might add the terminal node p vector
 	 of several nodes, not just one. d is incremented by evaluate_tree() at every terminal 
@@ -478,15 +478,15 @@ static void evaluate_sample(wsample_t *wsample, window_t *window, tree_t **trees
       int d = 0;
       evaluate_tree(p, &d, wsample->haplotype[h], trees[t]->root, window->n_subpops);
       
-      for(int k=0; k < window->n_subpops-1; k++) wsample->est_p[h][k] += p[k]/(double) d;
+      for(int k=0; k < window->n_subpops; k++) wsample->est_p[h][k] += p[k]/(double) d;
     }
 
     /* Normalize to probabilities that sum to one across all subpops. */
-    normalize_vector(wsample->est_p[h], window->n_subpops-1);
+    normalize_vector(wsample->est_p[h], window->n_subpops);
 #ifdef DEBUG_L2
     fprintf(stderr,"window %d sample %d haplotype %d - %4.2f", window->idx, wsample->sample_idx,
 	    h, wsample->est_p[h][0]);
-    for(int k=1; k < window->n_subpops-1; k++)
+    for(int k=1; k < window->n_subpops; k++)
       fprintf(stderr, ", %4.2f", wsample->est_p[h][k]);
     fprintf(stderr,"\n");
 #endif
@@ -556,7 +556,7 @@ static void *random_forest_thread(void *targ) {
   window.n_query_samples = 0;
   window.n_ref_haplotypes = 0;
   for(i=0; i < input->n_samples; i++) {
-    if (input->samples[i].apriori_subpop == 0)
+    if (input->samples[i].apriori_subpop == -1)
       window.n_query_samples++;
     else
       window.n_ref_haplotypes += 2;
@@ -568,15 +568,15 @@ static void *random_forest_thread(void *targ) {
      variable. Those are allocated in the loop using mm->allocate() */
   MA(window.query_samples, sizeof(wsample_t)*window.n_query_samples, wsample_t);
   for(i=0; i < window.n_query_samples; i++) {
-    MA(window.query_samples[i].est_p[0], sizeof(double)*4*(input->n_subpops-1), double);
+    MA(window.query_samples[i].est_p[0], sizeof(double)*4*(input->n_subpops), double);
     for(int j=1; j < 4; j++)
-      window.query_samples[i].est_p[j] = window.query_samples[i].est_p[j-1] + (input->n_subpops - 1);
+      window.query_samples[i].est_p[j] = window.query_samples[i].est_p[j-1] + input->n_subpops;
   }
   MA(window.ref_haplotypes, sizeof(int *)*window.n_ref_haplotypes, int *);
   MA(window.current_p, sizeof(double *)*window.n_ref_haplotypes, double *);
-  MA(window.current_p[0], sizeof(double)*window.n_ref_haplotypes*(input->n_subpops-1), double);
+  MA(window.current_p[0], sizeof(double)*window.n_ref_haplotypes*input->n_subpops, double);
   for(i=1; i < window.n_ref_haplotypes; i++)
-    window.current_p[i] = window.current_p[i-1] + (input->n_subpops - 1);
+    window.current_p[i] = window.current_p[i-1] + input->n_subpops;
   
   /* args object is always locked at the loop start point or when loop exits */
   pthread_mutex_lock(&args->lock);
@@ -610,13 +610,13 @@ static void *random_forest_thread(void *targ) {
       int q = 0;
       int r = 0;
       for(i=0; i < input->n_samples; i++) {
-	if (input->samples[i].apriori_subpop == 0) {
+	if (input->samples[i].apriori_subpop == -1) {
 	  window.query_samples[q].sample_idx = i;
-	  setup_query_sample(window.query_samples + q, input->samples + i, input->n_subpops - 1,
+	  setup_query_sample(window.query_samples + q, input->samples + i, input->n_subpops,
 			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
 	  q++;
 	} else {
-	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r, input->n_subpops - 1,
+	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r, input->n_subpops,
 			      w, input->samples + i, crf->rf_start_idx, crf->rf_end_idx, ma);
 	  r += 2;
 	}
@@ -647,7 +647,7 @@ static void *random_forest_thread(void *targ) {
 
 	for(int j=0; j < 4; j++) {
 
-	  for(int k=0; k < input->n_subpops - 1; k++) {
+	  for(int k=0; k < input->n_subpops; k++) {
 	    /* Must be careful to not cause underflow or overflow of int8_t floating point encoding.
 	       Note this also takes care of problems with 0s or 1s */
 	    double p = wsample->est_p[j][k];
@@ -687,11 +687,11 @@ static void *random_forest_thread(void *targ) {
 
 static void dump_results(input_t *input) {
   for(int i=0; i < input->n_samples; i++) {
-    if (input->samples[i].apriori_subpop == 0) {
+    if (input->samples[i].apriori_subpop == -1) {
       for(int h=0; h < 4; h++) {
 	for(int j=0; j < input->n_windows; j++) {
 	  fprintf(stderr,"sample %d/%d\twindow %d", i, h, j);
-	  for(int k=0; k < input->n_subpops - 1; k++) {
+	  for(int k=0; k < input->n_subpops; k++) {
 	    fprintf(stderr,"\t%1.3f", DF8(input->samples[i].est_p[h][j][k]));
 	  }
 	  fprintf(stderr,"\n");
