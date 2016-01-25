@@ -37,7 +37,7 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
   double *p = (double *) ma->allocate(sizeof(double)*n_windows*n_subpops, WHEREFROM);
   for(i=0; i < n_windows; i++) {
     for(k=0; k < n_subpops; k++) {
-      double tmp = DF8(sample->est_p[haplotype][i][k]);
+      double tmp = DF8(sample->est_p[haplotype][ IDX(i,k) ]);
       if (tmp <= 0.) tmp = 0.0001;
       p[IDX(i,k)] = log(tmp);
     }
@@ -124,7 +124,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
 
   double *alpha = (double *) ma->allocate(sizeof(double)*n_subpops*n_windows, WHEREFROM);
   for(k=0; k < n_subpops; k++)
-    alpha[IDX(0,k)] = DF8(sample->est_p[haplotype][0][k]);
+    alpha[IDX(0,k)] = DF8(sample->est_p[haplotype][ IDX(0,k) ]);
   normalize_vector(alpha, n_subpops);
 
   for(i=1; i < n_windows; i++) {
@@ -138,12 +138,12 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
       alpha[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
 	alpha[ IDX(i,j) ] += alpha[ IDX(i-1,k) ]*( (j==k) ? stay : change );
-      alpha[ IDX(i,j) ] = alpha[ IDX(i,j) ]*DF8(sample->est_p[haplotype][i][j]);
+      alpha[ IDX(i,j) ] = alpha[ IDX(i,j) ]*DF8(sample->est_p[haplotype][ IDX(i,j) ]);
     }
     normalize_vector(alpha + i*n_subpops, n_subpops);
     /*    fprintf(stderr,"sample %s  haplotype %d   window %5d", sample->sample_id, haplotype, i);
     for(k=0; k < n_subpops; k++)
-      fprintf(stderr,"\t%1.3f %1.5f",alpha[ IDX(i,k) ], DF8(sample->est_p[haplotype][i][k]));
+      fprintf(stderr,"\t%1.3f %1.5f",alpha[ IDX(i,k) ], DF8(sample->est_p[haplotype][ IDX(i,k) ]));
       fprintf(stderr,"\n");*/
   }
 
@@ -162,7 +162,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
     for(j=0; j < n_subpops; j++) {
       beta[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
-	beta[ IDX(i,j) ] +=  beta[ IDX(i+1,k) ]*DF8(sample->est_p[haplotype][i+1][k])*( (j==k) ? stay : change );
+	beta[ IDX(i,j) ] +=  beta[ IDX(i+1,k) ]*DF8(sample->est_p[haplotype][ IDX(i+1,k) ])*( (j==k) ? stay : change );
     }
     normalize_vector(beta + i*n_subpops, n_subpops);
     /*    fprintf(stderr,"sample %s  haplotype %d   window %5d pos %8.5f", sample->sample_id, haplotype, i,
@@ -232,6 +232,24 @@ static void *crf_thread(void *targ) {
   return NULL;
 }
 
+/* Note, does not show viterbi msp for haplotypes 2 and 3, the phase-flip windows */
+static void dump_results(input_t *input) {
+  int n_subpops = input->n_subpops;
+
+  for(int i=0; i < input->n_samples; i++) {
+    if (input->samples[i].apriori_subpop != -1) continue;
+    for(int h=0; h < 2; h++) {
+      for(int j=0; j < input->n_windows; j++) {
+	fprintf(stderr,"sample %20.20s haplotype %d window %6d - %d", input->samples[i].sample_id, h, j,
+		input->samples[i].msp[h][j]);
+	for(int k=0; k < input->n_subpops; k++) 
+	  fprintf(stderr,"\t%1.5f", DF16(input->samples[i].current_p[h][ IDX(j,k) ]));
+	fprintf(stderr,"\n");
+      }
+    }
+  }
+}
+
 void crf(input_t *input) {
   thread_args_t args;
   pthread_t threads[rfmix_opts.n_threads];
@@ -252,30 +270,7 @@ void crf(input_t *input) {
   fprintf(stderr,"\n");
 
 #if 0
-  for(int i=0; i < input->n_samples; i++) {
-    if (input->samples[i].apriori_subpop != -1) continue;
-    for(int j=0; j < input->n_windows; j++) {
-      fprintf(stderr,"sample %20.20s window %6d -", input->samples[i].sample_id, j);
-      for(int h=0; h < 4; h++)
-	fprintf(stderr,"\t%d", input->samples[i].msp[h][j]);
-      fprintf(stderr,"\n");
-    }
-  }
-#endif
-#if 1
-  int n_subpops = input->n_subpops;
-  for(int i=0; i < input->n_samples; i++) {
-    if (input->samples[i].apriori_subpop != -1) continue;
-    for(int h=0; h < 2; h++) {
-      for(int j=0; j < input->n_windows; j++) {
-	fprintf(stderr,"sample %20.20s haplotype %d window %6d - %d", input->samples[i].sample_id, h, j,
-		input->samples[i].msp[h][j]);
-	for(int k=0; k < input->n_subpops; k++) 
-	  fprintf(stderr,"\t%1.5f", DF16(input->samples[i].current_p[h][ IDX(j,k) ]));
-	fprintf(stderr,"\n");
-      }
-    }
-  }
+  dump_results(input);
 #endif
 }
 

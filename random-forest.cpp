@@ -548,6 +548,7 @@ static void setup_ref_haplotype(int **ref_haplotypes, double **current_p, int n_
 static void *random_forest_thread(void *targ) {
   thread_args_t *args = (thread_args_t *) targ;
   input_t *input = args->input;
+  int n_subpops = input->n_subpops;
   window_t window;
   int i;
   
@@ -568,15 +569,15 @@ static void *random_forest_thread(void *targ) {
      variable. Those are allocated in the loop using mm->allocate() */
   MA(window.query_samples, sizeof(wsample_t)*window.n_query_samples, wsample_t);
   for(i=0; i < window.n_query_samples; i++) {
-    MA(window.query_samples[i].est_p[0], sizeof(double)*4*(input->n_subpops), double);
+    MA(window.query_samples[i].est_p[0], sizeof(double)*4*(n_subpops), double);
     for(int j=1; j < 4; j++)
-      window.query_samples[i].est_p[j] = window.query_samples[i].est_p[j-1] + input->n_subpops;
+      window.query_samples[i].est_p[j] = window.query_samples[i].est_p[j-1] + n_subpops;
   }
   MA(window.ref_haplotypes, sizeof(int *)*window.n_ref_haplotypes, int *);
   MA(window.current_p, sizeof(double *)*window.n_ref_haplotypes, double *);
-  MA(window.current_p[0], sizeof(double)*window.n_ref_haplotypes*input->n_subpops, double);
+  MA(window.current_p[0], sizeof(double)*window.n_ref_haplotypes*n_subpops, double);
   for(i=1; i < window.n_ref_haplotypes; i++)
-    window.current_p[i] = window.current_p[i-1] + input->n_subpops;
+    window.current_p[i] = window.current_p[i-1] + n_subpops;
   
   /* args object is always locked at the loop start point or when loop exits */
   pthread_mutex_lock(&args->lock);
@@ -598,7 +599,7 @@ static void *random_forest_thread(void *targ) {
       crf_window_t *crf = input->crf_windows + w;
       
     /* set up window_t object and decoded/unpacked information from the input_t object */
-      window.n_subpops = input->n_subpops;
+      window.n_subpops = n_subpops;
       window.idx = w;
       window.rng_idx = 1;
       window.n_snps = crf->rf_end_idx - crf->rf_start_idx + 1;
@@ -612,11 +613,11 @@ static void *random_forest_thread(void *targ) {
       for(i=0; i < input->n_samples; i++) {
 	if (input->samples[i].apriori_subpop == -1) {
 	  window.query_samples[q].sample_idx = i;
-	  setup_query_sample(window.query_samples + q, input->samples + i, input->n_subpops,
+	  setup_query_sample(window.query_samples + q, input->samples + i, n_subpops,
 			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
 	  q++;
 	} else {
-	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r, input->n_subpops,
+	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r, n_subpops,
 			      w, input->samples + i, crf->rf_start_idx, crf->rf_end_idx, ma);
 	  r += 2;
 	}
@@ -647,17 +648,18 @@ static void *random_forest_thread(void *targ) {
 
 	for(int j=0; j < 4; j++) {
 
-	  for(int k=0; k < input->n_subpops; k++) {
+	  for(int k=0; k < n_subpops; k++) {
+	    double p = wsample->est_p[j][k];
+	    input->samples[wsample->sample_idx].est_p[j][ IDX(w,k) ] = ef8(p);
 	    /* Must be careful to not cause underflow or overflow of int8_t floating point encoding.
 	       Note this also takes care of problems with 0s or 1s */
-	    double p = wsample->est_p[j][k];
-	    if (p <= min_ef8_val) {
+	    /*	    if (p <= min_ef8_val) {
 	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) -127;
 	    } else if (p >= max_ef8_val) {
 	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) 127;
 	    } else {
 	      input->samples[wsample->sample_idx].est_p[j][w][k] = EF8(p);
-	    }
+	      }*/
 	  }
 	}
       }
@@ -686,13 +688,15 @@ static void *random_forest_thread(void *targ) {
 }
 
 static void dump_results(input_t *input) {
+  int n_subpops = input->n_subpops;
+  
   for(int i=0; i < input->n_samples; i++) {
     if (input->samples[i].apriori_subpop == -1) {
       for(int h=0; h < 4; h++) {
 	for(int j=0; j < input->n_windows; j++) {
 	  fprintf(stderr,"sample %d/%d\twindow %d", i, h, j);
-	  for(int k=0; k < input->n_subpops; k++) {
-	    fprintf(stderr,"\t%1.3f", DF8(input->samples[i].est_p[h][j][k]));
+	  for(int k=0; k < n_subpops; k++) {
+	    fprintf(stderr,"\t%1.3f", DF8(input->samples[i].est_p[h][ IDX(j,k) ]));
 	  }
 	  fprintf(stderr,"\n");
 	}
@@ -703,7 +707,7 @@ static void dump_results(input_t *input) {
 
 void random_forest(input_t *input) {
   /* These are file scope variables used to ensure we do not underflow or overflow int8_t 
-     floating point encoding when setting values into input->samples[].est_p[][][]. These
+     floating point encoding when setting values into input->samples[].est_p[][ IDX(,) ]. These
      are the end result of this entire file's computations */
   min_ef8_val = DF8(-127);
   max_ef8_val = DF8(127);

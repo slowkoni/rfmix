@@ -116,8 +116,8 @@ typedef struct {
   int apriori_subpop; // 0 means query/admixed/unknown sample. 1 through K, reference sample
   int8_t *haplotype[2];
   int8_t *msp[4];
-  int16_t *current_p[2]; // current estimate of probability of subpop [hap][ IDX(crfwindow,subpop) ]
-  int8_t **est_p[4]; // new estimate of probability of subpop estimate [hap][crf_window][subpop]
+  int16_t *current_p[2]; // current estimate of probability of subpop [hap][ IDX(crf_window,subpop) ]
+  int8_t *est_p[4]; // new estimate of probability of subpop estimate [hap][ IDX(crf_window,subpop) ]
 } sample_t;
 
 typedef struct {
