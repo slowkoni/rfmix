@@ -213,7 +213,7 @@ static double evaluate_snp(double *si, double *n_child, tree_t *tree, int snp, i
   si[0] = shannon_information(p[0], n_child[0], tree->n_subpops-1);
   si[1] = shannon_information(p[1], n_child[1], tree->n_subpops-1);
   
-  return si[0] + si[1];
+  return (si[0] + si[1])/2.0;
 }
 
 static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_ref,
@@ -283,7 +283,8 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
 
     double split_information = evaluate_snp(child_si, child_n, tree, snp, ref_q, n_ref, ma);
     if (split_information < best_split && child_n[0] >= 1. && child_n[1] >= 1.) {
-#if DEBUG_L2
+      //#define DEBUG_L2
+#ifdef DEBUG_L2
       fprintf(stderr,"level %d - try %3d/%3d/%3d  split %6.3f in %6.3f,%6.3f  parent %6.3f  %6.3f\n", level,
 	      i, n_try, n_snps, split_information, child_si[0], child_si[1],si, split_information - si);
 #endif
@@ -482,7 +483,7 @@ static void evaluate_sample(wsample_t *wsample, window_t *window, tree_t **trees
 
     /* Normalize to probabilities that sum to one across all subpops. */
     normalize_vector(wsample->est_p[h], window->n_subpops-1);
-#if DEBUG_L2
+#ifdef DEBUG_L2
     fprintf(stderr,"window %d sample %d haplotype %d - %4.2f", window->idx, wsample->sample_idx,
 	    h, wsample->est_p[h][0]);
     for(int k=1; k < window->n_subpops-1; k++)
@@ -520,8 +521,8 @@ static void setup_query_sample(wsample_t *wsample, sample_t *sample, int n_subpo
   }
   
   for(int j=0; j < 4; j++) {
-    for(k=0; k < n_subpops-1; k++)
-      wsample->est_p[j][k] = 0.;
+    for(k=0; k < n_subpops; k++)
+      wsample->est_p[j][k] = 0.0;
   }
 }
 
@@ -537,9 +538,9 @@ static void setup_ref_haplotype(int **ref_haplotypes, double **current_p, int n_
     ref_haplotypes[1][t] = sample->haplotype[1][s];
   }
   
-  for(int k=0; k < n_subpops-1; k++) {
-    current_p[0][k] = DF8(sample->current_p[0][w][k]);
-    current_p[1][k] = DF8(sample->current_p[1][w][k]);
+  for(int k=0; k < n_subpops; k++) {
+    current_p[0][k] = DF16(sample->current_p[0][ IDX(w,k) ]);
+    current_p[1][k] = DF16(sample->current_p[1][ IDX(w,k) ]);
   }
 }
 
@@ -611,11 +612,11 @@ static void *random_forest_thread(void *targ) {
       for(i=0; i < input->n_samples; i++) {
 	if (input->samples[i].apriori_subpop == 0) {
 	  window.query_samples[q].sample_idx = i;
-	  setup_query_sample(window.query_samples + q, input->samples + i, input->n_subpops,
+	  setup_query_sample(window.query_samples + q, input->samples + i, input->n_subpops - 1,
 			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
 	  q++;
 	} else {
-	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r, input->n_subpops,
+	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r, input->n_subpops - 1,
 			      w, input->samples + i, crf->rf_start_idx, crf->rf_end_idx, ma);
 	  r += 2;
 	}
@@ -655,7 +656,6 @@ static void *random_forest_thread(void *targ) {
 	    } else if (p >= max_ef8_val) {
 	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) 127;
 	    } else {
-	      //fprintf(stderr,"%1.3f -> %d -> %1.3f\n", p, EF8(p), DF8(EF8(p)));
 	      input->samples[wsample->sample_idx].est_p[j][w][k] = EF8(p);
 	    }
 	  }

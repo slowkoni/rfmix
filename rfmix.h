@@ -14,9 +14,10 @@
    macro DF8(x) decodes the 8-bit integer to a double, and EF8(p) encodes
    a number in range min to max above to an integer. It is responsibility
    of the user of EF8(p) to set range to -127 to 127 and cast to int8_t */
-#define DF8(x) ( 1.0/(1.0+exp(((double) (x))/-24.0)) )
-#define EF8(p) ( (int) ( -24.0*log( (1.0-(p))/(p) ) ) )
-
+#define DF8(x) ( 1.0/(1.0+exp(((double) (x))/-12.0)) )
+#define EF8(p) ( (int) ( -12.0*log( (1.0-(p))/(p) ) ) )
+#define DF16(x) ( 1.0/( 1.0 + exp((double) (x)/-1024.0) ))
+#define EF16(p) ( (int) ( -1024*log( (1.0-(p))/(p) ) ) )
 
 /* Alternative with uniform rounding error over the range, and full range 0.0
    to 1.0. Also less expensive to encode, decode. The log-odds formulation
@@ -36,6 +37,7 @@ typedef struct {
   char *output_basename;
 
   double maximum_missing_data_freq;
+  int n_generations;
   int rf_window_size;
   int crf_spacing;
   int generations;
@@ -73,13 +75,26 @@ typedef struct {
   int crf_index; // CRF window index for this snp
 } snp_t;
 
+/* IMPORTANT: Because pointers take 8 bytes and the number of subpops is often small but 
+              number of windows large, the array of pointers for windows to arrays of 
+	      values for subpops per each window takes up as much or more memory than
+	      the values themselves. So the marco IDX(w,s) performs the translation from
+	      two dimensional indexing to one dimensional so we do not need the array 
+	      of pointers. The variable n_subpops must be defined and set appropriately
+	      in the function that uses IDX().
+
+	      An alternative is to have the outer dimension be subpops and the inner one
+	      be windows, but since most or all loops will access all subpops in a row
+	      for each window, looping subpops within the window loop, doing it this way
+	      produces better L2 cache performance by keeping the subpop values together */
+#define IDX(w,s) ( (w)*n_subpops + (s) )
 /* IMPORTANT: the current_p and est_p arrays are using the 8 bit float scheme discussed above */
 typedef struct {
   char *sample_id;
   int apriori_subpop; // 0 means query/admixed/unknown sample. 1 through K, reference sample
   int8_t *haplotype[2];
   int8_t *msp[4];
-  int8_t **current_p[2]; // current estimate of probability of subpop [hap][crf_window][subpop]
+  int16_t *current_p[2]; // current estimate of probability of subpop [hap][ IDX(crfwindow,subpop) ]
   int8_t **est_p[4]; // new estimate of probability of subpop estimate [hap][crf_window][subpop]
 } sample_t;
 

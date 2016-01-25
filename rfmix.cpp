@@ -61,6 +61,7 @@ static void init_options(void) {
   rfmix_opts.output_basename = (char *) "";
 
   rfmix_opts.maximum_missing_data_freq = 0.05;
+  rfmix_opts.n_generations = 8.;
   rfmix_opts.rf_window_size = 20;
   rfmix_opts.crf_spacing = 5;
   rfmix_opts.generations = 8;

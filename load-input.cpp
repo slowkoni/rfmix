@@ -415,6 +415,10 @@ static void load_alleles(input_t *input) {
 }
 
 static void set_crf_points(input_t *input) {
+
+  /* Local variable is needed for IDX(window,subpop) macro */
+  int n_subpops = input->n_subpops - 1;
+  
   /* Determine the number of defined CRF points we have (CRF windows), the
      central SNP that defines each one, and the boundaries of the larger
      window used to source SNPs for the random forest classification */
@@ -456,19 +460,15 @@ static void set_crf_points(input_t *input) {
     sample_t *sample = input->samples + k;
     
     for(int h=0; h < 2; h++) {
-      MA(sample->current_p[h], sizeof(int8_t *)*input->n_windows, int8_t *);
-      MA(sample->current_p[h][0], sizeof(int8_t)*input->n_windows*input->n_subpops, int8_t)
-
-	
-      for(int i=1; i < input->n_windows; i++)
-	sample->current_p[h][i] = sample->current_p[h][i-1] + input->n_subpops;
+      MA(sample->current_p[h], sizeof(int16_t)*input->n_windows*n_subpops, int16_t);
 
 
       for(int i=0; i < input->n_windows; i++) {	
-	for(int s=0; s < input->n_subpops; s++) 
-	  sample->current_p[h][i][s] = (int8_t) -127;
+	for(int s=0; s < n_subpops; s++)
+	  sample->current_p[h][ IDX(i,s) ] = (int16_t) -32767;
 	  
-	if (sample->apriori_subpop != 0) sample->current_p[h][i][sample->apriori_subpop - 1] = (int8_t) 127;
+	if (sample->apriori_subpop != 0)
+	  sample->current_p[h][ IDX(i,sample->apriori_subpop-1) ] = (int16_t) 32767;
       }
     }
   }
@@ -541,7 +541,6 @@ void free_input(input_t *input) {
 
     for(int h = 0; h < 2; h++) {
       free(sample->haplotype[h]);
-      free(sample->current_p[h][0]);
       free(sample->current_p[h]);
     }
 
