@@ -208,10 +208,10 @@ static double evaluate_snp(double *si, double *n_child, tree_t *tree, int snp, i
     }
   }
 
-  //  si[0] = gini_index(p[0], tree->n_subpops);
-  //  si[1] = gini_index(p[1], tree->n_subpops);
-  si[0] = shannon_information(p[0], n_child[0], tree->n_subpops);
-  si[1] = shannon_information(p[1], n_child[1], tree->n_subpops);
+  si[0] = gini_index(p[0], tree->n_subpops);
+  si[1] = gini_index(p[1], tree->n_subpops);
+  //si[0] = shannon_information(p[0], n_child[0], tree->n_subpops);
+  //si[1] = shannon_information(p[1], n_child[1], tree->n_subpops);
   
   return (si[0] + si[1])/2.0;
 }
