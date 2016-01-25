@@ -8,16 +8,38 @@
 /* As a critical feature to trim memory usage, we are going to use a log odds
    encoding of a floating point number restricted to range 0.0 - 1.0 by 
    8-bit integers in range -127 to 127. This effectively creates 8 bit floats.
-   The error for representation is at maximum about 0.5% and peaks in the
+   The error for representation is at maximum about 2.0% and peaks in the
    center of the 0.0 to 1.0 range. The minimum possible and maximum possible
-   floating point numbers are 0.005008156 and 0.994991844 respectively. The
-   macro DF8(x) decodes the 8-bit integer to a double, and EF8(p) encodes
-   a number in range min to max above to an integer. It is responsibility
-   of the user of EF8(p) to set range to -127 to 127 and cast to int8_t */
+   floating point numbers are 0.000025334 and 0.9999747 respectively. The
+   macro DF8(x) decodes the 8-bit integer to a double, and the inline function
+   ef8 encodes a number in range min to max above to an int8_t. */
 #define DF8(x) ( 1.0/(1.0+exp(((double) (x))/-12.0)) )
 #define EF8(p) ( (int) ( -12.0*log( (1.0-(p))/(p) ) ) )
+
+static inline int8_t ef8(double p) {
+  int tmp = (int) ( -12.0*log( (1.0-p)/p ) );
+  if (tmp < -127) tmp = -127;
+  if (tmp >  127) tmp =  127;
+  return tmp;
+}
+
+/* Likewise with int8_t float encodings above, but with int16_t giving much
+   higher precision and range closer to 0.0 and 1.0. The maximum error is
+   0.024% peaking at 0.5 and the range is 1.26765e-14 to what rounds to 1.0
+   in R. This level of precision is needed for current_p[2][] because these
+   arrays store the results of the forward-backward algorithm both for 
+   feedback to EM and for output of results. The forward-backward calculations
+   can produce a much finer degree of precision than random forest does with
+   a typical 100 trees or so */
 #define DF16(x) ( 1.0/( 1.0 + exp((double) (x)/-1024.0) ))
 #define EF16(p) ( (int) ( -1024*log( (1.0-(p))/(p) ) ) )
+
+static inline int16_t ef16(double p) {
+  int tmp = (int) ( -1024.0 * log( (1.0 - p)/p ) );
+  if (tmp < -32767) tmp = -32767;
+  if (tmp >  32767) tmp =  32767;
+  return tmp;
+}
 
 /* Alternative with uniform rounding error over the range, and full range 0.0
    to 1.0. Also less expensive to encode, decode. The log-odds formulation

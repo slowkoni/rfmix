@@ -60,10 +60,12 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
     d[k] = log(initial_p[k]) + p[ IDX(0,k) ];
 
   for(i=1; i < n_windows; i++) {
-    double genetic_distance = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
-    if (genetic_distance > 0.5) genetic_distance = 0.5;
-    log_change = log(genetic_distance);
-    log_stay = log(1.0 - genetic_distance);
+    double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
+    double change = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
+    //    double genetic_distance = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
+    //if (genetic_distance > 0.5) genetic_distance = 0.5;
+    log_change = log(change);
+    log_stay = log(1.0 - change);
       
     for(j=0; j < n_subpops; j++) {
       double p_obs = p[ IDX(i,j) ];
@@ -182,14 +184,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
     int tmp;
     for(k=0; k < n_subpops; k++) {
       p[k] /= sum_p;
-      if (p[k] > max_ef16_val) p[k] = max_ef16_val;
-      if (p[k] < min_ef16_val) p[k] = min_ef16_val;
-      tmp = EF16(p[k]);
-      if (tmp < -32767) tmp = -32767;
-      if (tmp > 32767) tmp = 32767;
-      //fprintf(stderr,"%-20.20s\t%5d\t%5d\t%5d\t%6.4f\t%6d\n", sample->sample_id, haplotype,
-      //      i,k,p[k], tmp);
-      sample->current_p[haplotype][ IDX(i,k) ] = tmp;
+      sample->current_p[haplotype][ IDX(i,k) ] = ef16(p[k]);
     }
   }
 }

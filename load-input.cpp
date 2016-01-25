@@ -464,10 +464,10 @@ static void set_crf_points(input_t *input) {
 
       for(int i=0; i < input->n_windows; i++) {	
 	for(int s=0; s < n_subpops; s++)
-	  sample->current_p[h][ IDX(i,s) ] = (int16_t) -32767;
+	  sample->current_p[h][ IDX(i,s) ] = ef16(0.0001/(n_subpops-1.));
 	  
 	if (sample->apriori_subpop != -1)
-	  sample->current_p[h][ IDX(i,sample->apriori_subpop) ] = (int16_t) 32767;
+	  sample->current_p[h][ IDX(i,sample->apriori_subpop) ] = ef16(0.9999);
       }
     }
   }
