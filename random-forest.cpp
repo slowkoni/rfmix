@@ -17,9 +17,6 @@
 
 extern rfmix_opts_t rfmix_opts;
 
-static double min_ef8_val;
-static double max_ef8_val;
-
 #define THREAD_WINDOW_CHUNK_SIZE (3)
 typedef struct {
   input_t *input;
@@ -709,9 +706,6 @@ void random_forest(input_t *input) {
   /* These are file scope variables used to ensure we do not underflow or overflow int8_t 
      floating point encoding when setting values into input->samples[].est_p[][ IDX(,) ]. These
      are the end result of this entire file's computations */
-  min_ef8_val = DF8(-127);
-  max_ef8_val = DF8(127);
-  //  fprintf(stderr,"Minimum F8 %1.3f\tMaximum F8 %1.3f\n", min_ef8_val, max_ef8_val);
   
   thread_args_t *args;
   MA(args, sizeof(thread_args_t), thread_args_t);

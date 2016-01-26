@@ -85,6 +85,7 @@ int main(int argc, char *argv[]) {
 
   random_forest(rfmix_input);
   crf(rfmix_input);
+  msp_output(rfmix_input);
   
   free_input(rfmix_input);
   return 0;

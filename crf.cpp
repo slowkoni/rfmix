@@ -15,7 +15,6 @@
 #include "mm.h"
 
 extern rfmix_opts_t rfmix_opts;
-static double min_ef16_val, max_ef16_val;
 
 #define SAMPLES_PER_BLOCK (8)
 typedef struct {
@@ -141,10 +140,12 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
       alpha[ IDX(i,j) ] = alpha[ IDX(i,j) ]*DF8(sample->est_p[haplotype][ IDX(i,j) ]);
     }
     normalize_vector(alpha + i*n_subpops, n_subpops);
-    /*    fprintf(stderr,"sample %s  haplotype %d   window %5d", sample->sample_id, haplotype, i);
+#ifdef DEBUG
+    fprintf(stderr,"sample %s  haplotype %d   window %5d", sample->sample_id, haplotype, i);
     for(k=0; k < n_subpops; k++)
       fprintf(stderr,"\t%1.3f %1.5f",alpha[ IDX(i,k) ], DF8(sample->est_p[haplotype][ IDX(i,k) ]));
-      fprintf(stderr,"\n");*/
+    fprintf(stderr,"\n");
+#endif      
   }
 
   double *beta = (double *) ma->allocate(sizeof(double)*n_subpops*(n_windows), WHEREFROM);
@@ -165,11 +166,13 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
 	beta[ IDX(i,j) ] +=  beta[ IDX(i+1,k) ]*DF8(sample->est_p[haplotype][ IDX(i+1,k) ])*( (j==k) ? stay : change );
     }
     normalize_vector(beta + i*n_subpops, n_subpops);
-    /*    fprintf(stderr,"sample %s  haplotype %d   window %5d pos %8.5f", sample->sample_id, haplotype, i,
+#ifdef DEBUG
+    fprintf(stderr,"sample %s  haplotype %d   window %5d pos %8.5f", sample->sample_id, haplotype, i,
 	    crf_windows[i].genetic_pos*100.);
     for(k=0; k < n_subpops; k++)
       fprintf(stderr,"\t%1.3f",beta[ IDX(i,k) ]);
-      fprintf(stderr,"\n");*/
+    fprintf(stderr,"\n");
+#endif
   }
 
   for(i=0; i < n_windows; i++) {
@@ -254,9 +257,6 @@ void crf(input_t *input) {
   thread_args_t args;
   pthread_t threads[rfmix_opts.n_threads];
 
-  min_ef16_val = DF16(-32767);
-  max_ef16_val = DF16( 32767);
-  
   args.next_sample = 0;
   args.samples_completed = 0;
   args.input = input;

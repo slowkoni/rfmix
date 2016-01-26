@@ -483,11 +483,6 @@ static void set_crf_points(input_t *input) {
 	sample->msp[h][i] = sample->apriori_subpop;
 
       MA(sample->est_p[h], sizeof(int8_t)*input->n_windows*n_subpops, int8_t);
-
-      //      MA(sample->est_p[h], sizeof(int8_t *)*input->n_windows, int8_t *);
-      //      MA(sample->est_p[h][0], sizeof(int8_t)*input->n_windows*input->n_subpops, int8_t);
-      //      for(int i=1; i < input->n_windows; i++)
-      //	sample->est_p[h][i] = sample->est_p[h][i-1] + input->n_subpops;
     }
   }
   fprintf(stderr,"done\n");
@@ -545,10 +540,9 @@ void free_input(input_t *input) {
       free(sample->current_p[h]);
     }
 
-    for(int h=0; h < 4; h++) {
-      //      free(sample->est_p[h][0]);
-      free(sample->est_p[h]);
-    }
+    for(int h=0; h < 4; h++)
+       free(sample->est_p[h]);
+    
 
     int *tmp = (int *) input->sample_hash->lookup(sample->sample_id);
     free(tmp);
