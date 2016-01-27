@@ -143,5 +143,6 @@ typedef struct {
 void crf(input_t *input);
 
 void msp_output(input_t *input);
+void fb_output(input_t *input);
 
 #endif

@@ -47,11 +47,12 @@ static int msp_compare(sample_t *samples, int n_samples, int n_windows, int a, i
   return 0;
 }
 
+#define MSP_EXTENSION ".msp.tsv"
 void msp_output(input_t *input) {
-  int fname_length = strlen(rfmix_opts.output_basename) + strlen(".msp.tsv") + 1;
+  int fname_length = strlen(rfmix_opts.output_basename) + strlen(MSP_EXTENSION) + 1;
   char fname[fname_length];
 
-  sprintf(fname,"%s.msp.tsv", rfmix_opts.output_basename);
+  sprintf(fname,"%s%s", rfmix_opts.output_basename, MSP_EXTENSION);
   FILE *f = fopen(fname, "w");
   if (f == NULL) {
     fprintf(stderr,"Can't open output file %s (%s)\n", fname, strerror(errno));
@@ -82,10 +83,47 @@ void msp_output(input_t *input) {
   fclose(f);
 }
 
-
-
-void output(input_t *input) {
-
-  msp_output(input);
-  //  fb_output(input);
+static void fb_output_haplotype(FILE *f, int16_t *p, int n) {
+  fprintf(f,"%1.5f",DF16(p[0]));
+  for(int k=1; k < n; k++)
+    fprintf(f," %1.5f",DF16(p[k]));
 }
+
+#define FB_EXTENSION ".fb.tsv"
+void fb_output(input_t *input) {
+  fprintf(stderr,"Outputing forward-backward results.... \n");
+  int fname_length = strlen(rfmix_opts.output_basename) + strlen(FB_EXTENSION) + 1;
+  char fname[fname_length];
+
+  sprintf(fname,"%s%s", rfmix_opts.output_basename, FB_EXTENSION);
+  FILE *f = fopen(fname, "w");
+  if (f == NULL) {
+    fprintf(stderr,"Can't open output file %s (%s)\n", fname, strerror(errno));
+    exit(-1);
+  }
+  
+  fprintf(f,"#chm\tpos\tgpos");
+  for(int j=0; j < input->n_samples; j++) {
+    sample_t *sample = input->samples + j;
+    if (sample->apriori_subpop != -1) continue;
+
+    fprintf(f,"\t%s.0\t%s.1", sample->sample_id, sample->sample_id);
+  }
+  fprintf(f,"\n");
+
+  for(int i=0; i < input->n_windows; i++) {
+    fprintf(f,"%s\t%d\t%1.2f", rfmix_opts.chromosome, input->snps[input->crf_windows[i].snp_idx].pos,
+	    input->crf_windows[i].genetic_pos*100.);
+    for(int j=0; j < input->n_samples; j++) {
+      if (input->samples[j].apriori_subpop != -1) continue;
+      for(int h=0; h < 2; h++) {
+	fprintf(f,"\t");
+	fb_output_haplotype(f, input->samples[j].current_p[h] + i*input->n_subpops, input->n_subpops);
+      }
+    }
+    fprintf(f,"\n");
+  }
+ 
+  fclose(f);
+}
+

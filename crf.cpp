@@ -21,7 +21,8 @@ typedef struct {
   int next_sample;
   int samples_completed;
   input_t *input;
-
+  double viterbi_logl;
+  
   pthread_mutex_t lock;
 } thread_args_t;
 
@@ -115,7 +116,8 @@ static void normalize_vector(double *p, int n) {
     p[k] /= sum_p;
 }
 
-static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_windows, int n_windows, int n_subpops, mm *ma) {
+static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_windows,
+			     int n_windows, int n_subpops, mm *ma) {
   int i, j, k;
   double change, stay;
 
@@ -198,6 +200,8 @@ static void *crf_thread(void *targ) {
   input_t *input;
   int start_sample, end_sample;
   mm *ma = new mm(16, WHEREFROM);
+  double total_logl = 0.;
+  double logl;
   
   args = (thread_args_t *) targ;
   input = args->input;
@@ -215,8 +219,9 @@ static void *crf_thread(void *targ) {
     for(int i=start_sample; i < end_sample; i++) {
       if (input->samples[i].apriori_subpop != -1) continue;
       for(int h=0; h < 4; h++) {
-	viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
-		input->n_subpops, ma);
+	logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
+		       input->n_subpops, ma);
+	if (h < 2) total_logl += logl;
 	forward_backward(input->samples + i, h, input->crf_windows, input->n_windows,
 			 input->n_subpops, ma);
       }
@@ -230,6 +235,7 @@ static void *crf_thread(void *targ) {
 	      args->samples_completed / (double) input->n_samples * 100.);
     }
   }
+  args->viterbi_logl += total_logl;
   pthread_mutex_unlock(&args->lock);
 
   return NULL;
@@ -260,15 +266,17 @@ void crf(input_t *input) {
   args.next_sample = 0;
   args.samples_completed = 0;
   args.input = input;
+  args.viterbi_logl = 0.;
+ 
   pthread_mutex_init(&args.lock, NULL);
-  rfmix_opts.n_threads = 1;
   for(int i=0; i < rfmix_opts.n_threads; i++)
     pthread_create(threads + i, NULL, crf_thread, (void *) &args);
 
   for(int i=0; i < rfmix_opts.n_threads; i++)
     pthread_join(threads[i], NULL);
   fprintf(stderr,"\n");
-
+  fprintf(stderr,"Viterbi MSP logl = %1.5f\n", args.viterbi_logl);
+  
 #if 0
   dump_results(input);
 #endif
