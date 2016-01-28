@@ -1,6 +1,6 @@
 #ifndef HASH_TABLE_H
 #define HASH_TABLE_H
-#include <kmacros.h>
+#include "kmacros.h"
 
 typedef struct {
   char *key;

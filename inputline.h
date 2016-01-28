@@ -10,6 +10,7 @@ class Inputline {
   int line_no;
   
   Inputline(char *fname);
+  Inputline(char *fname, char *chm);
   ~Inputline();
   char *nextline();
   char *nextline(int return_copy);
@@ -27,7 +28,7 @@ class Inputline {
   pthread_mutex_t lock;
 
   FILE *open_gzip_read(char *fname);
-  FILE *open_bcftools_read(char *fname);
+  FILE *open_bcftools_read(char *fname, char *chm);
 };
 
 enum { INPUTLINE_NOCOPY = 0, INPUTLINE_RETURN_COPY = 1 };

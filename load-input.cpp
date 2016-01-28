@@ -68,7 +68,7 @@ static void load_samples(input_t *input) {
   /* All samples in the query VCF file will be analyzed, and are not expected to be
      named in the seperate sample map file. Grab them from the VCF header and add
      them to the sample array first */
-  Inputline *qvcf = new Inputline(rfmix_opts.qvcf_fname);
+  Inputline *qvcf = new Inputline(rfmix_opts.qvcf_fname, rfmix_opts.chromosome);
   p = vcf_skip_headers(qvcf);
 
   CHOMP(p);
@@ -88,7 +88,7 @@ static void load_samples(input_t *input) {
   delete qvcf; 
 
   /* Now load sample ids from the sample map file */
-  Inputline *f = new Inputline(rfmix_opts.class_fname);
+  Inputline *f = new Inputline(rfmix_opts.class_fname, rfmix_opts.chromosome);
 
   /* Now scan the sample map file and determine the reference subpops and sample mapping to them */
   while((p = f->nextline(INPUTLINE_NOCOPY)) != NULL) {
@@ -247,11 +247,11 @@ static void identify_common_snps(input_t *input) {
   char *qvcf_sample_header, *rvcf_sample_header;
   char *pq, *pr;
   
-  Inputline *qvcf = new Inputline(rfmix_opts.qvcf_fname);
+  Inputline *qvcf = new Inputline(rfmix_opts.qvcf_fname, rfmix_opts.chromosome);
   vcf_skip_headers(qvcf);
   skip_to_chromosome(qvcf, rfmix_opts.chromosome);
   
-  Inputline *rvcf = new Inputline(rfmix_opts.rvcf_fname);
+  Inputline *rvcf = new Inputline(rfmix_opts.rvcf_fname, rfmix_opts.chromosome);
   vcf_skip_headers(rvcf);
   skip_to_chromosome(rvcf, rfmix_opts.chromosome);
   
@@ -382,7 +382,7 @@ static void parse_alleles(input_t *input, Inputline *vcf, vcf_column_map_t *colu
 }
 
 static void load_alleles(input_t *input) {
-  Inputline *qvcf = new Inputline(rfmix_opts.qvcf_fname);
+  Inputline *qvcf = new Inputline(rfmix_opts.qvcf_fname, rfmix_opts.chromosome);
   char *sample_header = vcf_skip_headers(qvcf);
 
   vcf_column_map_t *column_map;
@@ -398,7 +398,7 @@ static void load_alleles(input_t *input) {
   free(column_map);
   n_cols = 0;
 
-  Inputline *rvcf = new Inputline(rfmix_opts.rvcf_fname);
+  Inputline *rvcf = new Inputline(rfmix_opts.rvcf_fname, rfmix_opts.chromosome);
   sample_header = vcf_skip_headers(rvcf);
   n_cols = vcf_parse_column_header(&column_map, sample_header, input);
 

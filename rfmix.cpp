@@ -34,7 +34,7 @@ static option_t options[] = {
     "Random forest window size (class estimation window size)" },
   { 'c', "crf-spacing", &rfmix_opts.crf_spacing, OPT_INT, 0, 1,
     "Conditional Random Field spacing (# of SNPs)" },
-  { 'g', "generations", &rfmix_opts.generations, OPT_INT, 0, 1,
+  { 'G', "generations", &rfmix_opts.generations, OPT_INT, 0, 1,
     "Average number of generations since expected admixture" },
   { 't', "trees", &rfmix_opts.n_trees, OPT_INT, 0, 1,
     "Number of tree in random forest to estimate population class probability" },

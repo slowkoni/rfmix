@@ -12,8 +12,6 @@
 #include "inputline.h"
 #include "rfmix.h"
 
-extern rfmix_opts_t rfmix_opts;
-
 #define INPUTLINE_CHUNK (8192)
 FILE *Inputline::open_gzip_read(char *fname) {
   int fds[2];
@@ -67,7 +65,7 @@ FILE *Inputline::open_gzip_read(char *fname) {
   return f;
 }
 
-FILE *Inputline::open_bcftools_read(char *fname) {
+FILE *Inputline::open_bcftools_read(char *fname, char *chm) {
   int fds[2];
   int child_pid;
   FILE *f;
@@ -87,8 +85,12 @@ FILE *Inputline::open_bcftools_read(char *fname) {
     close(fds[0]);
     dup2(fds[1], 1);
     close(fds[1]);
-    execlp("bcftools","bcftools","view","--regions", rfmix_opts.chromosome, fname, NULL);
-
+    if (chm != NULL) {
+      execlp("bcftools","bcftools","view","--regions", chm, fname, NULL);
+    } else {
+      execlp("bcftools","bcftools","view", fname, NULL);
+    }
+    
     /* If bcftools is successfully started, execlp() never returns and these lines
        are never reached. Only if execlp() fails will the process continue here */
     fprintf(stderr,"Can't execute bcftools to read BCF file %s (%s) - is bcftools installed?\n",
@@ -120,14 +122,14 @@ FILE *Inputline::open_bcftools_read(char *fname) {
   return f;
 }
 
-Inputline::Inputline(char *fname) {
+Inputline::Inputline(char *fname, char *chm) {
   /* use the filename extension to determine if we need a helper program to read 
      the file. Functions above take care of starting the relevant program and
      piping its output back to a FILE handle we can read like any other file */
   int l = strlen(fname);
   if ((l > 7 && strcmp(".bcf.gz", fname + l - 7) == 0) ||
       (l > 4 && strcmp(".bcf", fname +l - 4) == 0)) {
-    f = open_bcftools_read(fname);
+    f = open_bcftools_read(fname, chm);
   }
   else if (l > 3 && strcmp(".gz", fname + l - 3) == 0) {
     f = open_gzip_read(fname);
@@ -150,6 +152,10 @@ Inputline::Inputline(char *fname) {
   line_no = 0;
 
   pthread_mutex_init(&lock, NULL);
+}
+
+Inputline::Inputline(char *fname) {
+  Inputline(fname, NULL);
 }
 
 char *Inputline::nextline(int return_copy) {
