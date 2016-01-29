@@ -8,6 +8,7 @@
 #include "kmacros.h"
 #include "cmdline-utils.h"
 #include "vcf.h"
+#include "s-sample.h"
 
 typedef struct {
   char *vcf_fname;
@@ -98,11 +99,26 @@ int main(int argc, char *argv[]) {
   vcf->load_snps(opts.chromosome);
   vcf->load_haplotypes(opts.chromosome);
 
-  for(int i=0; i < vcf->n_snps; i++) {
-    fprintf(stderr,"%d", vcf->snps[i].pos);
-    for(int j=0; j < vcf->n_samples; j++)
-      fprintf(stderr,"\t%d|%d", vcf->samples[j].haplotypes[0][i], vcf->samples[j].haplotypes[1][i]);
-    fprintf(stderr,"\n");
+  Sample **parents = new Sample*[vcf->n_samples];
+  for(int i=0; i < vcf->n_samples; i++) {
+    parents[i] = new Sample(vcf->samples[i].sample_id, 0, vcf->snps, vcf->n_snps,
+			    vcf->samples[i].haplotypes[0], vcf->samples[i].haplotypes[1]);
+  }
+
+  for(int g=0; g < opts.n_generations; g++) {
+    Sample **children = new Sample*[vcf->n_samples];
+    for(int i=0; i < vcf->n_samples; i++) {
+      int p1_idx = rand()/(RAND_MAX + 1.0) * vcf->n_samples;
+      int p2_idx = rand()/(RAND_MAX + 1.0) * vcf->n_samples;
+      
+      children[i] = new Sample(parents[p1_idx], parents[p2_idx]);
+    }
+
+    for(int i=0; i < vcf->n_samples; i++)
+      delete parents[i];
+    delete[] parents;
+
+    parents = children;
   }
   
   return 0;

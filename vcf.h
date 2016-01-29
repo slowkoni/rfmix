@@ -1,3 +1,5 @@
+#ifndef VCF_H
+#define VCF_H
 
 #include <stdint.h>
 #include "inputline.h"
@@ -44,3 +46,4 @@ class VCF {
 #define SNP_ALLOC_STEP (16384)
 
 
+#endif
