@@ -4,6 +4,7 @@
 #include <errno.h>
 
 #include <unistd.h>
+#include <time.h>
 
 #include "cmdline-utils.h"
 #include "kmacros.h"
@@ -30,11 +31,11 @@ static option_t options[] = {
   /* Tunable algorithm parameters (none are required - defaults are reasonable)*/
   {   0, "max-missing", &rfmix_opts.maximum_missing_data_freq, OPT_DBL, 0, 1,
       "Maximum proportion of missing data allowed to include a SNP" },
-  { 'w', "rf-window-size", &rfmix_opts.rf_window_size, OPT_INT, 0, 1,
+  { 'w', "rf-window-size", &rfmix_opts.rf_window_size, OPT_DBL, 0, 1,
     "Random forest window size (class estimation window size)" },
-  { 'c', "crf-spacing", &rfmix_opts.crf_spacing, OPT_INT, 0, 1,
+  { 'c', "crf-spacing", &rfmix_opts.crf_spacing, OPT_DBL, 0, 1,
     "Conditional Random Field spacing (# of SNPs)" },
-  { 'G', "generations", &rfmix_opts.generations, OPT_INT, 0, 1,
+  { 'G', "generations", &rfmix_opts.n_generations, OPT_DBL, 0, 1,
     "Average number of generations since expected admixture" },
   { 't', "trees", &rfmix_opts.n_trees, OPT_INT, 0, 1,
     "Number of tree in random forest to estimate population class probability" },
@@ -61,10 +62,9 @@ static void init_options(void) {
   rfmix_opts.output_basename = (char *) "";
 
   rfmix_opts.maximum_missing_data_freq = 0.05;
-  rfmix_opts.n_generations = 8.;
-  rfmix_opts.rf_window_size = 20;
-  rfmix_opts.crf_spacing = 5;
-  rfmix_opts.generations = 8;
+  rfmix_opts.rf_window_size = 0.2;
+  rfmix_opts.crf_spacing = 0.1;
+  rfmix_opts.n_generations = 8;
   rfmix_opts.n_trees = 100;
 
   rfmix_opts.n_threads = sysconf(_SC_NPROCESSORS_CONF);
@@ -73,6 +73,65 @@ static void init_options(void) {
 }
 
 static void verify_options(void) {
+  int stop = 0;
+  
+  if (rfmix_opts.qvcf_fname == NULL) {
+    fprintf(stderr,"\nSpecify query/admixed VCF input file with -f option");
+    stop = 1;
+  }
+  if (rfmix_opts.rvcf_fname == NULL) {
+    fprintf(stderr,"\nSpecify reference VCF input file with -r option");
+    stop = 1;
+  }
+  if (rfmix_opts.genetic_fname == NULL) {
+    fprintf(stderr,"\nSpecify genetic map file with -g option");
+    stop = 1;
+  }
+  if (rfmix_opts.class_fname == NULL) {
+    fprintf(stderr,"\nSpecify reference sample subpopulation mapping with -m option");
+    stop = 1;
+  }
+  if (rfmix_opts.output_basename == NULL) {
+    fprintf(stderr,"\nSpecify output files basename (prefix) with -o option");
+    stop = 1;
+  }
+
+  if (rfmix_opts.maximum_missing_data_freq < 0.0 || rfmix_opts.maximum_missing_data_freq > 1.0) {
+    fprintf(stderr,"\nRange for --max-missing option is 0.0 to 1.0");
+    stop = 1;
+  }
+  if (rfmix_opts.rf_window_size <= 0.) {
+    fprintf(stderr,"\nRandom Forest window size must be greater than 0");
+    stop = 1;
+  }
+  if (rfmix_opts.crf_spacing <= 0) {
+    fprintf(stderr,"\nConditional random field size must be larger than 0");
+    stop = 1;
+  }
+  if (rfmix_opts.n_generations < 2.) {
+    fprintf(stderr,"\nNumber of generations since putative admixture must be 2 or larger");
+    stop = 1;
+  }
+  if (rfmix_opts.n_trees < 10) {
+    fprintf(stderr,"\nNumber of random forest trees must be at least 10");
+    stop = 1;
+  }
+  if (rfmix_opts.n_threads < 1) rfmix_opts.n_threads = 1;
+  if (rfmix_opts.chromosome == NULL) {
+    fprintf(stderr,"\nSpecify VCF chromosome to analyze with -c option");
+    stop = 1;
+  }
+
+  if (strcmp(rfmix_opts.random_seed_str, "clock") == 0) {
+    rfmix_opts.random_seed = time(NULL);
+  } else {
+    rfmix_opts.random_seed = strtod(rfmix_opts.random_seed_str,0);
+  }
+
+  if (stop != 0) {
+    fprintf(stderr,"\n\nCorrect command line errors to run rfmix. Run program with no options for help\n");
+    exit(-1);
+  }
 }
 
 int main(int argc, char *argv[]) {

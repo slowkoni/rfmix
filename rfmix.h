@@ -13,11 +13,11 @@
    floating point numbers are 0.000025334 and 0.9999747 respectively. The
    macro DF8(x) decodes the 8-bit integer to a double, and the inline function
    ef8 encodes a number in range min to max above to an int8_t. */
-#define DF8(x) ( 1.0/(1.0+exp(((double) (x))/-12.0)) )
-#define EF8(p) ( (int) ( -12.0*log( (1.0-(p))/(p) ) ) )
+#define DF8(x) ( 1.0/(1.0+exp(((double) (x))/-25.0)) )
+#define EF8(p) ( (int) ( -25.0*log( (1.0-(p))/(p) ) ) )
 
 static inline int8_t ef8(double p) {
-  int tmp = (int) ( -12.0*log( (1.0-p)/p ) );
+  int tmp = (int) ( -25.0*log( (1.0-p)/p ) );
   if (tmp < -127) tmp = -127;
   if (tmp >  127) tmp =  127;
   return tmp;
@@ -59,10 +59,9 @@ typedef struct {
   char *output_basename;
 
   double maximum_missing_data_freq;
-  int n_generations;
-  int rf_window_size;
-  int crf_spacing;
-  int generations;
+  double n_generations;
+  double rf_window_size;
+  double crf_spacing;
   int n_trees;
   int reanalyze_reference;
   
