@@ -413,6 +413,7 @@ static void load_alleles(input_t *input) {
   n_cols = 0;
 }
 
+#define WINDOW_ALLOC_STEP 128
 static void set_crf_points(input_t *input) {
 
   /* Local variable is needed for IDX(window,subpop) macro */
@@ -422,30 +423,62 @@ static void set_crf_points(input_t *input) {
      central SNP that defines each one, and the boundaries of the larger
      window used to source SNPs for the random forest classification */
   fprintf(stderr,"\n   setting up CRF points and random forest windows... ");
-  input->n_windows = input->n_snps / rfmix_opts.crf_spacing;
-  MA(input->crf_windows, sizeof(crf_window_t)*input->n_windows, crf_window_t);
+  input->n_windows = 0;
+  input->crf_windows = NULL;
 
   int rf_start, rf_end;
-  int j = rfmix_opts.crf_spacing / 2;
-  for(int i=0; i < input->n_windows; i++,j += rfmix_opts.crf_spacing) {
+  int i = 0;
+  int j = 0;
+  while(j < input->n_snps) {
+    if (i % WINDOW_ALLOC_STEP == 0)
+      RA(input->crf_windows, sizeof(crf_window_t)*(i + WINDOW_ALLOC_STEP), crf_window_t);
+
     input->crf_windows[i].snp_idx = j;
     input->crf_windows[i].genetic_pos = input->snps[j].genetic_pos / 100.;
-      // input->genetic_map->translate_seqpos(input->snps[j].pos) / 100.;
 
-    rf_start = j - rfmix_opts.rf_window_size / 2;
+    if (rfmix_opts.rf_window_size < 2.0) {
+      double half_window = rfmix_opts.rf_window_size / 2.;
 
-    rf_end = rf_start + rfmix_opts.rf_window_size - 1;
-    if (rf_start < 0) rf_start = 0;
+      rf_start = input->crf_windows[i].snp_idx;
+      while(rf_start > 0 && input->crf_windows[i].snp_idx - rf_start < 250 &&
+	    input->snps[j].genetic_pos - input->snps[rf_start].genetic_pos < half_window)
+	rf_start--;
+      if (i > 0)
+	while(rf_start > input->crf_windows[i-1].rf_end_idx + 1) rf_start--;
+      
+      rf_end = input->crf_windows[i].snp_idx;
+      while(rf_end < input->n_snps - 1 && rf_end - input->crf_windows[i].snp_idx < 250 &&
+	    input->snps[rf_end].genetic_pos - input->snps[j].genetic_pos < half_window) rf_end++;
+      if (i == input->n_windows - 1) rf_end = input->n_snps - 1;
+    } else {
 
-    if (rf_end >= input->n_snps) {
-      rf_end = input->n_snps - 1;
-      rf_start = rf_end - rfmix_opts.rf_window_size + 1;
+      rf_start = j - rfmix_opts.rf_window_size / 2;
+      
+      rf_end = rf_start + rfmix_opts.rf_window_size - 1;
       if (rf_start < 0) rf_start = 0;
-    }
 
+      if (rf_end >= input->n_snps) {
+	rf_end = input->n_snps - 1;
+	rf_start = rf_end - rfmix_opts.rf_window_size + 1;
+	if (rf_start < 0) rf_start = 0;
+      }
+    }
+    
     input->crf_windows[i].rf_start_idx = rf_start;
     input->crf_windows[i].rf_end_idx = rf_end;
+
+    if (rfmix_opts.crf_spacing < 1.0) {
+      double current_pos = input->crf_windows[i].genetic_pos * 100.; // Need in cM not M
+      j++;
+      while(j < input->n_snps && j - input->crf_windows[i].snp_idx < 500 &&
+	    input->snps[j].genetic_pos - current_pos < rfmix_opts.crf_spacing) j++;
+    } else {
+      j += rfmix_opts.crf_spacing;
+    }
+    i++;
   }
+  input->crf_windows[i-1].rf_end_idx = input->n_snps - 1;
+  input->n_windows = i;
   fprintf(stderr,"done\n");
   
   /* Set up and initialize the current (starting) marginal probabilities for subpop
