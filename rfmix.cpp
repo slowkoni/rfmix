@@ -39,6 +39,8 @@ static option_t options[] = {
     "Average number of generations since expected admixture" },
   { 't', "trees", &rfmix_opts.n_trees, OPT_INT, 0, 1,
     "Number of tree in random forest to estimate population class probability" },
+  { 'e', "em-iterations", &rfmix_opts.em_iterations, OPT_INT, 0, 1,
+    "Maximum number of EM iterations" },
   {   0, "reanalyze-reference", &rfmix_opts.reanalyze_reference, OPT_FLAG, 0, 0,
       "After first iteration, include reference panel in analysis and reclassify" },
 
@@ -66,6 +68,7 @@ static void init_options(void) {
   rfmix_opts.crf_spacing = 0.1;
   rfmix_opts.n_generations = 8;
   rfmix_opts.n_trees = 100;
+  rfmix_opts.em_iterations = 0;
 
   rfmix_opts.n_threads = sysconf(_SC_NPROCESSORS_CONF);
   rfmix_opts.chromosome = (char *) "";

@@ -119,7 +119,6 @@ static void normalize_vector(double *p, int n) {
 static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_windows,
 			     int n_windows, int n_subpops, mm *ma) {
   int i, j, k;
-  double change, stay;
 
   if (haplotype > 1) return;
 
@@ -186,7 +185,6 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
       sum_p += p[k];
     }
 
-    int tmp;
     for(k=0; k < n_subpops; k++) {
       p[k] /= sum_p;
       sample->current_p[haplotype][ IDX(i,k) ] = ef16(p[k]);
@@ -242,7 +240,7 @@ static void *crf_thread(void *targ) {
 }
 
 /* Note, does not show viterbi msp for haplotypes 2 and 3, the phase-flip windows */
-static void dump_results(input_t *input) {
+static void __attribute__((unused))dump_results(input_t *input) {
   int n_subpops = input->n_subpops;
 
   for(int i=0; i < input->n_samples; i++) {

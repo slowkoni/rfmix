@@ -21,7 +21,7 @@
 typedef struct {
   int n_blocks;
   void **blocks;
-  int block_size;
+  size_t block_size;
   int current_block;
   int ptr;
 } mm_block_t;
@@ -53,9 +53,9 @@ class mm {
  private:
   int n_blocks;
   void **blocks;
-  int block_size;
+  size_t block_size;
   int current_block;
-  int ptr;
+  size_t ptr;
 };
 
 #endif

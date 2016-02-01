@@ -88,7 +88,7 @@ void *mm::allocate(int size, WHEREARGS) {
    function. After several calls, if being used again and again in the same 
    loop context, this function will simply reset pointers and not call free() */
 void mm::recycle() {
-  int i, new_blocksize;
+  int __attribute__((unused))i, __attribute__((unused))new_blocksize;
 
   /* if more than one block was allocated in last usage, increase the
      blocksize so that a single block would have been enough */

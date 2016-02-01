@@ -90,13 +90,13 @@ typedef struct {
   node_t *root;
 } tree_t;
 
-static void output_vector(FILE *f, double *p, int n, char delim) {
+static void __attribute__((unused))output_vector(FILE *f, double *p, int n, char delim) {
   fprintf(f,"%1.3f",p[0]);
   for(int i=1; i < n; i++)
     fprintf(f,"%c%1.3f", delim, p[i]);
 }
 
-static double normalize_vector(double *p, int n) {
+static void normalize_vector(double *p, int n) {
   double p_sum = 0.;
   for(int i=0; i < n; i++)
     p_sum += p[i];
@@ -122,7 +122,7 @@ static void output_node(FILE *f, node_t *node, int n) {
   }
 }
 
-static void output_tree(FILE *f, tree_t *tree) {
+static void __attribute__((unused))output_tree(FILE *f, tree_t *tree) {
   output_node(f, tree->root, tree->n_subpops);
   fprintf(f,"\n\n");
 }
@@ -178,14 +178,14 @@ static double evaluate_snp(double *si, double *n_child, tree_t *tree, int snp, i
   int j,k;
   double p[2][tree->n_subpops];
   
-  for(int k=0; k < tree->n_subpops; k++) {
+  for(k=0; k < tree->n_subpops; k++) {
     p[0][k] = 0.;
     p[1][k] = 0.;
   }
   n_child[0] = 0.;
   n_child[1] = 0.;
   
-  for(int j=0; j < n_ref; j++) {
+  for(j=0; j < n_ref; j++) {
     if (tree->haplotypes[ref_q[j]][snp] == 0) {
       add_current_p(p[0], tree->current_p[ref_q[j]], tree->n_subpops);
       n_child[0] += 1.0;
@@ -684,7 +684,7 @@ static void *random_forest_thread(void *targ) {
   return NULL;
 }
 
-static void dump_results(input_t *input) {
+static void __attribute__((unused))dump_results(input_t *input) {
   int n_subpops = input->n_subpops;
   
   for(int i=0; i < input->n_samples; i++) {

@@ -180,7 +180,6 @@ static double vcf_snp_maf(int *r_mac, double *r_miss, char *p) {
   int n_obs = 0;
   double ref_freq = 0.;
   
-  int col_idx = VCF_LEAD_COLS;
   while((q = strsep(&p, "\t")) != NULL) {
 
     /* We are going to skip errors at this stage, they will be reported later when
@@ -244,7 +243,6 @@ static char *get_next_snp(Inputline *vcf, char **chm, int *pos) {
 }
 
 static void identify_common_snps(input_t *input) {
-  char *qvcf_sample_header, *rvcf_sample_header;
   char *pq, *pr;
   
   Inputline *qvcf = new Inputline(rfmix_opts.qvcf_fname, rfmix_opts.chromosome);

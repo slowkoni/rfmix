@@ -64,6 +64,7 @@ typedef struct {
   double crf_spacing;
   int n_trees;
   int reanalyze_reference;
+  int em_iterations;
   
   int n_threads;
   char *chromosome;

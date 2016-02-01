@@ -117,10 +117,10 @@ static uint32_t superfasthash (const char * data, int len) {
 #define RD1(a,b,c,d,x,s) (a) = ROTATE(((a) + F((b),(c),(d)) + (x)), (s)) 
 #define RD2(a,b,c,d,x,s) (a) = ROTATE(((a)+G((b),(c),(d))+(x)+0x5A827999), (s))
 #define RD3(a,b,c,d,x,s) (a) = ROTATE(((a)+H((b),(c),(d))+(x)+0x6ED9EBA1), (s))
-static uint32_t md4(char *m, uint64_t length) {
+static uint32_t __attribute__((unused))md4(char *m, uint64_t length) {
   uint32_t a, b, c, d;
-  int pad_length, i;
-
+  uint64_t pad_length, i;
+  
   a = 0x67452301;
   b = 0xEFCDAB89;
   c = 0x98BADCFE;
@@ -450,11 +450,11 @@ static void rebuild_table(hash_table_t *ht, int new_size) {
   free(new_ht);
 }
 
-static void ht_reset(hash_table_t *ht) {
+static void __attribute__((unused))ht_reset(hash_table_t *ht) {
   ht->tp = 0;
 }
 
-static char *ht_nextkey(hash_table_t *ht, int *key_length) {
+static char __attribute__((unused))*ht_nextkey(hash_table_t *ht, int *key_length) {
 
   while(ht->tp < ht->size && ht->table[ht->tp].key_length <= 0) ht->tp++;
 
@@ -467,7 +467,7 @@ static char *ht_nextkey(hash_table_t *ht, int *key_length) {
   return ht->table[ht->tp++].key;
 }
 
-static void *ht_nextitem(hash_table_t *ht, char **key, int *key_length) {
+static void __attribute__((unused))*ht_nextitem(hash_table_t *ht, char **key, int *key_length) {
   while(ht->tp < ht->size && ht->table[ht->tp].key_length <= 0) ht->tp++;
 
   if (ht->tp == ht->size) {
