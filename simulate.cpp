@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
 
   fprintf(vf,"##fileformat=VCFv4.1\n");
   fprintf(vf,"##source=%s (rfmix v2)\n", argv[0]);
-  fprintf(vf,"##FORMAT=<ID=GT,Number=1,Type=String,Descripton=\"Phased Genotype\">\n";
+  fprintf(vf,"##FORMAT=<ID=GT,Number=1,Type=String,Descripton=\"Phased Genotype\">\n");
   fprintf(vf,"##contig=<ID=%s>\n", opts.chromosome);
   fprintf(vf,"#CHROM\tPOS\tID\tREF\tVAR\tQUAL\tFILTER\tINFO\tFORMAT");
   fprintf(rf,"chm\tpos");
