@@ -75,23 +75,23 @@ static void init_options(void) {
 static void verify_options(void) {
   int stop = 0;
   
-  if (rfmix_opts.qvcf_fname == NULL) {
+  if (strcmp(rfmix_opts.qvcf_fname,"") == 0) {
     fprintf(stderr,"\nSpecify query/admixed VCF input file with -f option");
     stop = 1;
   }
-  if (rfmix_opts.rvcf_fname == NULL) {
+  if (strcmp(rfmix_opts.rvcf_fname,"") == 0) {
     fprintf(stderr,"\nSpecify reference VCF input file with -r option");
     stop = 1;
   }
-  if (rfmix_opts.genetic_fname == NULL) {
+  if (strcmp(rfmix_opts.genetic_fname,"") == 0) {
     fprintf(stderr,"\nSpecify genetic map file with -g option");
     stop = 1;
   }
-  if (rfmix_opts.class_fname == NULL) {
+  if (strcmp(rfmix_opts.class_fname,"") == 0) {
     fprintf(stderr,"\nSpecify reference sample subpopulation mapping with -m option");
     stop = 1;
   }
-  if (rfmix_opts.output_basename == NULL) {
+  if (strcmp(rfmix_opts.output_basename,"") == 0) {
     fprintf(stderr,"\nSpecify output files basename (prefix) with -o option");
     stop = 1;
   }
@@ -117,11 +117,11 @@ static void verify_options(void) {
     stop = 1;
   }
   if (rfmix_opts.n_threads < 1) rfmix_opts.n_threads = 1;
-  if (rfmix_opts.chromosome == NULL) {
+  if (strcmp(rfmix_opts.chromosome,"") == 0) {
     fprintf(stderr,"\nSpecify VCF chromosome to analyze with -c option");
     stop = 1;
   }
-
+  
   if (strcmp(rfmix_opts.random_seed_str, "clock") == 0) {
     rfmix_opts.random_seed = time(NULL);
   } else {

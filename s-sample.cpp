@@ -9,6 +9,8 @@
 #include "kmacros.h"
 #include "s-sample.h"
 
+HashTable *Sample::map = new HashTable(8192);
+
 Sample::Sample(char *sample_id, int subpop, snp_t *snps, int n_snps, int8_t *h1, int8_t *h2) {
 
   this->sample_id = strdup(sample_id);
@@ -25,7 +27,9 @@ Sample::Sample(char *sample_id, int subpop, snp_t *snps, int n_snps, int8_t *h1,
     haplotype[1][i] = h2[i];
     this->subpop[0][i] = subpop;
     this->subpop[1][i] = subpop;
-  } 
+  }
+  
+  map->insert(sample_id, (void *) this);
 }
 
 Sample::Sample(Sample *p1, Sample *p2) {
@@ -48,11 +52,13 @@ Sample::Sample(Sample *p1, Sample *p2) {
   
   p1->meiosis(haplotype[0], subpop[0]);
   p2->meiosis(haplotype[1], subpop[1]);
+  map->insert(sample_id, (void *) this);
 }
 
 Sample::~Sample(void) {
 
   free(sample_id);
+  map->remove(sample_id);
   delete[] haplotype[0];
   delete[] haplotype[1];
   delete[] subpop[0];
@@ -81,6 +87,7 @@ void Sample::meiosis(int8_t *gamate, int8_t *gamate_subpop) {
   }
 
 }
-	
-	
-  
+ 
+Sample *Sample::get_sample(char *sample_name) {
+  return (Sample *) map->lookup(sample_name);
+}

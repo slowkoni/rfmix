@@ -83,7 +83,7 @@ void VCF::parse_samples(char *sample_line) {
   
 }
 
-void VCF::load_snps(char *chromosome) {
+void VCF::load_snps(char *chromosome, GeneticMap *genetic_map) {
   char *p, *q;
 
   snps = NULL;
@@ -104,6 +104,7 @@ void VCF::load_snps(char *chromosome) {
 
     q = strsep(&p, "\t");
     snps[n_snps].pos = atoi(q);
+    snps[n_snps].genetic_pos = genetic_map->translate_seqpos(snps[n_snps].pos);
     n_snps++;
   }
 }

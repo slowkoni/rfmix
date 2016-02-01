@@ -2,6 +2,7 @@
 #define VCF_H
 
 #include <stdint.h>
+#include "genetic-map.h"
 #include "inputline.h"
 #include "hash-table.h"
 
@@ -22,7 +23,7 @@ class VCF {
   VCF(char *fname, char *chm);
   ~VCF();
 
-  void load_snps(char *chromosome);
+  void load_snps(char *chromosome, GeneticMap *genetic_map);
   int8_t *get_haplotype(char *sample_id);
   void load_haplotypes(char *chromosome);
 
