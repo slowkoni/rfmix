@@ -7,6 +7,23 @@
 #include "inputline.h"
 #include "vcf.h"
 
+int VCF::n_alleles = 0;
+char **VCF::alleles = NULL;
+
+char *VCF::find_allele_string(char *q) {
+
+  for(int i=0; i < VCF::n_alleles; i++)
+    if (strcmp(q, VCF::alleles[i]) == 0) return VCF::alleles[i];
+  
+  if (VCF::n_alleles % ALLELE_ALLOC_STEP == 0)
+    RA(VCF::alleles, sizeof(char *)*(n_alleles + ALLELE_ALLOC_STEP), char *);
+  VCF::alleles[VCF::n_alleles] = strdup(q);
+  char *rval = alleles[VCF::n_alleles];
+  
+  VCF::n_alleles++;
+  return rval;
+}
+
 static char *vcf_skip_headers(Inputline *vcf) {
   char *p;
 
@@ -105,6 +122,12 @@ void VCF::load_snps(char *chromosome, GeneticMap *genetic_map) {
     q = strsep(&p, "\t");
     snps[n_snps].pos = atoi(q);
     snps[n_snps].genetic_pos = genetic_map->translate_seqpos(snps[n_snps].pos);
+    snps[n_snps].snp_id = strdup(strsep(&p,"\t"));
+    q = strsep(&p, "\t");
+    snps[n_snps].ref = VCF::find_allele_string(q);
+    q = strsep(&p, "\t");
+    snps[n_snps].alt = VCF::find_allele_string(q);
+    
     n_snps++;
   }
 }

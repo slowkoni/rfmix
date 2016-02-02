@@ -16,8 +16,12 @@ typedef struct {
 typedef struct {
   int pos;
   double genetic_pos;
+  char *snp_id;
+  char *ref;
+  char *alt;
 } snp_t;
 
+#define ALLELE_ALLOC_STEP (16)
 class VCF {
  public:
   VCF(char *fname, char *chm);
@@ -33,6 +37,10 @@ class VCF {
   snp_t *snps;
   int n_snps;
 
+  static char *find_allele_string(char *q);
+  static int n_alleles;
+  static char **alleles;
+
  private:
   char *fname;
   sample_t **column_map;
@@ -40,6 +48,7 @@ class VCF {
   HashTable *sample_map;
   Inputline *f;
   void parse_samples(char *sample_line);
+
 };
 
 #define VCF_LEAD_COLS (9)

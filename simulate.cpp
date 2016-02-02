@@ -219,7 +219,8 @@ int main(int argc, char *argv[]) {
   fprintf(rf,"\n");
   
   for(int i=0; i < vcf->n_snps; i++) {
-    fprintf(vf,"%s\t%d\t.\tA\tC\t100\tPASS\t.\tGT", opts.chromosome, vcf->snps[i].pos);
+    fprintf(vf,"%s\t%d\t%s\t%s\t%s\t100\tPASS\t.\tGT", opts.chromosome, vcf->snps[i].pos,
+	    vcf->snps[i].snp_id, vcf->snps[i].ref, vcf->snps[i].alt);
     fprintf(rf,"%s\t%d", opts.chromosome, vcf->snps[i].pos);
     
     for(int j=0; j < n_samples; j++) {
