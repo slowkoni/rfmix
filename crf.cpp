@@ -190,6 +190,25 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
       sample->current_p[haplotype][ IDX(i,k) ] = ef16(p[k]);
     }
   }
+
+  /* Calculate and set Suyash stay-in-state forward-backward probabilities */
+  for(i=0; i < n_windows; i++) {
+    double s = 0.; // stay-in-state
+    double x = 0.; // change state
+    for(int k=0; k < n_subpops; k++) {
+      for(int l=0; l < n_subpops; l++) {
+	if (k == l) {
+	  s +=  alpha[ IDX(i,k) ] * beta[ IDX(i,l) ];
+	} else {
+	  x += alpha[ IDX(i,k) ] * beta[ IDX(i,l) ];
+	}
+      }
+    }
+    /* s + x should equal 1 (or floating point rounding error close enough), 
+       but I'll normalize here anyway in case normalization of alpha and
+       beta changes above */
+    sample->sis_p[haplotype][i] = s/(s+x);
+  }
 }
 
 

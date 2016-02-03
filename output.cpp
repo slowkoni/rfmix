@@ -91,7 +91,7 @@ static void fb_output_haplotype(FILE *f, int16_t *p, int n) {
 
 #define FB_EXTENSION ".fb.tsv"
 void fb_output(input_t *input) {
-  fprintf(stderr,"Outputing forward-backward results.... \n");
+  fprintf(stderr,"Outputting forward-backward results.... \n");
   int fname_length = strlen(rfmix_opts.output_basename) + strlen(FB_EXTENSION) + 1;
   char fname[fname_length];
 
@@ -127,3 +127,30 @@ void fb_output(input_t *input) {
   fclose(f);
 }
 
+#define SIS_EXTENSION ".sis.tsv"
+void fb_stay_in_state_output(input_t *input) {
+  fprintf(stderr,"Outputting Suyash-mode stay-in-state forward-backward results...  \n");
+  int fname_length = strlen(rfmix_opts.output_basename) + strlen(SIS_EXTENSION) + 1;
+  char fname[fname_length];
+
+  sprintf(fname,"%s%s", rfmix_opts.output_basename, SIS_EXTENSION);
+  FILE *f = fopen(fname, "w");
+  if (f == NULL) {
+    fprintf(stderr,"Can't open output file %s (%s)\n", fname, strerror(errno));
+    exit(-1);
+  }
+  fprintf(f,"#chm\tpos\tgpos");
+  for(int j=0; j < input->n_samples; j++)
+    fprintf(f,"\t%s.0\t%s.1", input->samples[j].sample_id, input->samples[j].sample_id);
+  fprintf(f,"\n");
+  
+  for(int i=0; i < input->n_windows - 1; i++) {
+    fprintf(f,"%s\t%d\t%1.2f", rfmix_opts.chromosome, input->snps[input->crf_windows[i].snp_idx].pos,
+	    input->crf_windows[i].genetic_pos*100.);    
+    for(int j=0; j < input->n_samples; j++) {
+      if (input->samples[j].apriori_subpop != -1) continue;
+      fprintf(f,"\t%1.5f\t%1.5f", input->samples[j].sis_p[0][i], input->samples[j].sis_p[1][i]);
+    }
+    fprintf(f,"\n");
+  }
+}

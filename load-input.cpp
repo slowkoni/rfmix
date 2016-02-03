@@ -137,6 +137,8 @@ static void load_samples(input_t *input) {
     samples[i].est_p[1] = NULL;
     samples[i].est_p[2] = NULL;
     samples[i].est_p[3] = NULL;
+    samples[i].sis_p[0] = NULL;
+    samples[i].sis_p[1] = NULL;
   }
 
   /* All work of this function is stored into the input_t struct and made available
@@ -491,12 +493,12 @@ static void set_crf_points(input_t *input) {
     
     for(int h=0; h < 2; h++) {
       MA(sample->current_p[h], sizeof(int16_t)*input->n_windows*n_subpops, int16_t);
-
+      MA(sample->sis_p[h], sizeof(float)*input->n_windows*n_subpops, float);
 
       for(int i=0; i < input->n_windows; i++) {	
 	for(int s=0; s < n_subpops; s++)
 	  sample->current_p[h][ IDX(i,s) ] = ef16(0.0001/(n_subpops-1.));
-	  
+	
 	if (sample->apriori_subpop != -1)
 	  sample->current_p[h][ IDX(i,sample->apriori_subpop) ] = ef16(0.9999);
       }
