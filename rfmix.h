@@ -117,7 +117,7 @@ typedef struct {
   int8_t *haplotype[2];
   int8_t *msp[4];
   int16_t *current_p[2]; // current estimate of probability of subpop [hap][ IDX(crf_window,subpop) ]
-  int8_t *est_p[4]; // new estimate of probability of subpop estimate [hap][ IDX(crf_window,subpop) ]
+  int16_t *est_p[4]; // new estimate of probability of subpop estimate [hap][ IDX(crf_window,subpop) ]
   float *sis_p[2]; // Suyash stay-in-state forward-backward probability [hap][ crf_window ]
 } sample_t;
 

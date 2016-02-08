@@ -39,7 +39,7 @@ static option_t options[] = {
   { 'G', "generations", &opts.n_generations, OPT_INT, 0, 1,
     "Number of generations to simulate random mating admixture" },
 
-  { 0, "random_seed", &opts.random_seed_str, OPT_STR, 0, 1,
+  { 0, "random-seed", &opts.random_seed_str, OPT_STR, 0, 1,
     "Seed value for random number generation - integer value (maybe specified in"
     "hexadecimal by preceeding with 0x), or the string \"clock\" to seed with "
     "the current system time." },

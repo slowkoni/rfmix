@@ -128,7 +128,7 @@ static void __attribute__((unused))output_tree(FILE *f, tree_t *tree) {
 }
 
 static void add_current_p(double *p, double *current_p, int n) {
-  for(int k=0; k < n-1; k++) p[k] += current_p[k];
+  for(int k=0; k < n; k++) p[k] += current_p[k];
 }
 
 /* Normalizes a probability vector and returns the shannon information - any
@@ -147,7 +147,7 @@ static double shannon_information(double *p, int np, int n) {
     if (tmp > 0.) si += tmp*log(tmp);
   }
 
-  return -si;    
+  return -si*n;    
 }
 
 /* Return the "gini index" of a probabily vector. The vector typically needs to
@@ -170,7 +170,7 @@ static double gini_index(double *p, int n) {
 
   return 1.0 - gi;
 }
-
+  
 /* calculates the sum of the shannon information content of the resulting child 
    nodes if we split the reference haplotypes remaining <ref_q> on snp <snp>. This
    function and its caller can also use the gini index for this purpose */
@@ -205,12 +205,13 @@ static double evaluate_snp(double *si, double *n_child, tree_t *tree, int snp, i
     }
   }
 
-  si[0] = gini_index(p[0], tree->n_subpops);
-  si[1] = gini_index(p[1], tree->n_subpops);
+  si[0] = gini_index(p[0], tree->n_subpops)*n_child[0];
+  si[1] = gini_index(p[1], tree->n_subpops)*n_child[1];
   //si[0] = shannon_information(p[0], n_child[0], tree->n_subpops);
   //si[1] = shannon_information(p[1], n_child[1], tree->n_subpops);
-  
-  return (si[0] + si[1])/2.0;
+
+  //return sq_difference(p[0], p[1], tree->n_subpops);
+  return (si[0] + si[1])/(n_child[0] + n_child[1]);
 }
 
 static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_ref,
@@ -257,8 +258,8 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
      to 1/sqrt(2) of those SNPs remaining. This was a parameter of the original program
      but is currently fixed here. All SNPs should not be evaluated, or the only randomness
      in the tree is due to bootstrap selection of haplotypes */
-  int n_try = n_snps * M_SQRT1_2;
-  if (n_try < 1) n_try = 1;
+  int n_try = (int) (n_snps * M_SQRT1_2);
+  if (n_try < 10) n_try = n_snps;
 
   /* Randomly permute the array of SNPs, then evaluate the first n_try of them. The random
      number generator is key'd to the window index for repeatability of runs on the same
@@ -275,7 +276,7 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
   double child_si[2];
   double best_si[2];
   double child_n[2];
-  for(int i=0; i < n_try; i++) {
+  for(int i=0; i < n_try && i < n_snps; i++) {
     int snp = snp_q[i];
 
     double split_information = evaluate_snp(child_si, child_n, tree, snp, ref_q, n_ref, ma);
@@ -289,9 +290,14 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
       best_si[0] = child_si[0];
       best_si[1] = child_si[1];
       best_split = split_information;      
+    } else if (child_n[0] < 1. || child_n[1] < 1.) {
+      snp_q[i] = snp_q[n_snps-1];
+      snp_q[n_snps-1] = snp;
+      n_snps--;
+      i--;
     }
   }
-
+  
   /* If no SNP was selected, then no division is possible with the n_try SNPs evaluated such 
      that both branches have at least one haplotype, with the n_try SNPs evaluated. This
      terminates the tree at this node. */
@@ -303,15 +309,16 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
       for(int k=0; k < tree->n_subpops; k++)
 	node->p[k] += tree->current_p[ref_q[i]][k];
     }
-    normalize_vector(node->p, tree->n_subpops);
-    
+
+    //#define DEBUG_L2
 #ifdef DEBUG_L2
-    fprintf(stderr,"Terminate tree at level %d\n", level);
+    fprintf(stderr,"Terminate tree at level %d (%d snps remain)\n", level, n_snps);
     fprintf(stderr,"[ %4.1f", node->p[0]);
     for(int k=1; k < tree->n_subpops; k++)
       fprintf(stderr,", %4.1f",node->p[k]);
     fprintf(stderr," ]\n");
 #endif
+    normalize_vector(node->p, tree->n_subpops);
     
     node->left = NULL;
     node->right = NULL;
@@ -601,7 +608,7 @@ static void *random_forest_thread(void *targ) {
       window.rng_idx = 1;
       window.n_snps = crf->rf_end_idx - crf->rf_start_idx + 1;
       window.snps = input->snps + crf->rf_start_idx;
-#ifdef DEBUG_L1
+#ifdef DEBUG_L2
       fprintf(stderr,"window %d  %d snps   %d to %d\n", window.idx, window.n_snps, crf->rf_start_idx,
 	      crf->rf_end_idx);
 #endif
@@ -647,7 +654,7 @@ static void *random_forest_thread(void *targ) {
 
 	  for(int k=0; k < n_subpops; k++) {
 	    double p = wsample->est_p[j][k];
-	    input->samples[wsample->sample_idx].est_p[j][ IDX(w,k) ] = ef8(p);
+	    input->samples[wsample->sample_idx].est_p[j][ IDX(w,k) ] = ef16(p);
 	    /* Must be careful to not cause underflow or overflow of int8_t floating point encoding.
 	       Note this also takes care of problems with 0s or 1s */
 	    /*	    if (p <= min_ef8_val) {
@@ -693,7 +700,7 @@ static void __attribute__((unused))dump_results(input_t *input) {
 	for(int j=0; j < input->n_windows; j++) {
 	  fprintf(stderr,"sample %d/%d\twindow %d", i, h, j);
 	  for(int k=0; k < n_subpops; k++) {
-	    fprintf(stderr,"\t%1.3f", DF8(input->samples[i].est_p[h][ IDX(j,k) ]));
+	    fprintf(stderr,"\t%1.3f", DF16(input->samples[i].est_p[h][ IDX(j,k) ]));
 	  }
 	  fprintf(stderr,"\n");
 	}

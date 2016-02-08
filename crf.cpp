@@ -37,8 +37,8 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
   double *p = (double *) ma->allocate(sizeof(double)*n_windows*n_subpops, WHEREFROM);
   for(i=0; i < n_windows; i++) {
     for(k=0; k < n_subpops; k++) {
-      double tmp = DF8(sample->est_p[haplotype][ IDX(i,k) ]);
-      if (tmp <= 0.) tmp = 0.0001;
+      double tmp = DF16(sample->est_p[haplotype][ IDX(i,k) ]);
+      if (tmp <= 0.) tmp = 0.000001;
       p[IDX(i,k)] = log(tmp);
     }
   }
@@ -47,32 +47,30 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
      ancestry proportions and use that for the initial probability vector. For now
      set to equal probability. */
   double initial_p[n_subpops];
-  for(k=0; k < n_subpops; k++) initial_p[k] = 1./(double) n_subpops;
+  for(k=0; k < n_subpops; k++) initial_p[k] = log(1./(double) n_subpops);
 
   int *phi = (int *) ma->allocate(sizeof(int)*n_subpops*n_windows, WHEREFROM);
   double *d = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
   double *nd = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
   double *swap_d;
-  double log_change, log_stay, max_d;
+  double max_d;
   int max_state;
   
   for(k=0; k < n_subpops; k++)
-    d[k] = log(initial_p[k]) + p[ IDX(0,k) ];
+    d[k] = initial_p[k] + p[ IDX(0,k) ];
 
   for(i=1; i < n_windows; i++) {
     double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
-    double change = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
-    //    double genetic_distance = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
-    //if (genetic_distance > 0.5) genetic_distance = 0.5;
-    log_change = log(change);
-    log_stay = log(1.0 - change);
+    double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)));
+    double log_rcb = log(rcb);
+    double log_nrcb = log(1.0 - rcb);
       
     for(j=0; j < n_subpops; j++) {
       double p_obs = p[ IDX(i,j) ];
 
       max_state = -1; max_d = -DBL_MAX;
       for(k=0; k < n_subpops; k++) {
-	double tmp_d = d[k] + p_obs + ( (j==k) ? log_stay : log_change );
+	double tmp_d = d[k] + p_obs + ( (j==k) ? log_nrcb : (log_rcb) );
 	if (tmp_d > max_d) {
 	  max_state = k;
 	  max_d = tmp_d;
@@ -124,7 +122,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
 
   double *alpha = (double *) ma->allocate(sizeof(double)*n_subpops*n_windows, WHEREFROM);
   for(k=0; k < n_subpops; k++)
-    alpha[IDX(0,k)] = DF8(sample->est_p[haplotype][ IDX(0,k) ]);
+    alpha[IDX(0,k)] = DF16(sample->est_p[haplotype][ IDX(0,k) ]);
   normalize_vector(alpha, n_subpops);
 
   for(i=1; i < n_windows; i++) {
@@ -138,13 +136,13 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
       alpha[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
 	alpha[ IDX(i,j) ] += alpha[ IDX(i-1,k) ]*( (j==k) ? stay : change );
-      alpha[ IDX(i,j) ] = alpha[ IDX(i,j) ]*DF8(sample->est_p[haplotype][ IDX(i,j) ]);
+      alpha[ IDX(i,j) ] = alpha[ IDX(i,j) ]*DF16(sample->est_p[haplotype][ IDX(i,j) ]);
     }
     normalize_vector(alpha + i*n_subpops, n_subpops);
 #ifdef DEBUG
     fprintf(stderr,"sample %s  haplotype %d   window %5d", sample->sample_id, haplotype, i);
     for(k=0; k < n_subpops; k++)
-      fprintf(stderr,"\t%1.3f %1.5f",alpha[ IDX(i,k) ], DF8(sample->est_p[haplotype][ IDX(i,k) ]));
+      fprintf(stderr,"\t%1.3f %1.5f",alpha[ IDX(i,k) ], DF16(sample->est_p[haplotype][ IDX(i,k) ]));
     fprintf(stderr,"\n");
 #endif      
   }
@@ -164,7 +162,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
     for(j=0; j < n_subpops; j++) {
       beta[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
-	beta[ IDX(i,j) ] +=  beta[ IDX(i+1,k) ]*DF8(sample->est_p[haplotype][ IDX(i+1,k) ])*( (j==k) ? stay : change );
+	beta[ IDX(i,j) ] +=  beta[ IDX(i+1,k) ]*DF16(sample->est_p[haplotype][ IDX(i+1,k) ])*( (j==k) ? stay : change );
     }
     normalize_vector(beta + i*n_subpops, n_subpops);
 #ifdef DEBUG

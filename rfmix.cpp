@@ -111,8 +111,10 @@ static void verify_options(void) {
     fprintf(stderr,"\nConditional random field size must be larger than 0");
     stop = 1;
   }
-  if (rfmix_opts.n_generations < 2.) {
-    fprintf(stderr,"\nNumber of generations since putative admixture must be 2 or larger");
+  if (rfmix_opts.n_generations < 0.) {
+    // and it really only makes sense 2 or larger, but smaller values useful for testing
+    // penalizing recombination
+    fprintf(stderr,"\nNumber of generations since putative admixture must be larger than 0.");
     stop = 1;
   }
   if (rfmix_opts.n_trees < 10) {
@@ -130,7 +132,11 @@ static void verify_options(void) {
   } else {
     rfmix_opts.random_seed = strtod(rfmix_opts.random_seed_str,0);
   }
-
+  /* set random seed of the system random number generator for any cases it is
+     used, usually temporary hacks/tests/debugging. Otherwise md5rng is used 
+     for repeatability even when multiple threads are used */
+  srand(rfmix_opts.random_seed);
+  
   if (stop != 0) {
     fprintf(stderr,"\n\nCorrect command line errors to run rfmix. Run program with no options for help\n");
     exit(-1);

@@ -515,7 +515,7 @@ static void set_crf_points(input_t *input) {
       for(int i=0; i < input->n_windows; i++)
 	sample->msp[h][i] = sample->apriori_subpop;
 
-      MA(sample->est_p[h], sizeof(int8_t)*input->n_windows*n_subpops, int8_t);
+      MA(sample->est_p[h], sizeof(int16_t)*input->n_windows*n_subpops, int16_t);
     }
   }
   fprintf(stderr,"done\n");
