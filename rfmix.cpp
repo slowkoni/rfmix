@@ -43,7 +43,9 @@ static option_t options[] = {
     "Maximum number of EM iterations" },
   {   0, "reanalyze-reference", &rfmix_opts.reanalyze_reference, OPT_FLAG, 0, 0,
       "After first iteration, include reference panel in analysis and reclassify" },
-
+  { 'b', "bootstrap-mode", &rfmix_opts.bootstrap_mode, OPT_INT, 0, 1,
+    "Specify random forest bootstrap mode as integer code (see manual)" },
+  
   /* Runtime execution control options (only specifies how the program runs)*/
   { 0, "n-threads", &rfmix_opts.n_threads, OPT_INT, 0, 1,
     "Force number of simultaneous thread for parallel execution" },
@@ -68,8 +70,10 @@ static void init_options(void) {
   rfmix_opts.crf_spacing = 0.1;
   rfmix_opts.n_generations = 8;
   rfmix_opts.n_trees = 100;
+  rfmix_opts.bootstrap_mode = 1;
   rfmix_opts.em_iterations = 0;
-
+  rfmix_opts.minimum_snps = 10;
+  
   rfmix_opts.n_threads = sysconf(_SC_NPROCESSORS_CONF);
   rfmix_opts.chromosome = (char *) "";
   rfmix_opts.random_seed_str = (char *) "0xDEADBEEF";
@@ -121,6 +125,11 @@ static void verify_options(void) {
     fprintf(stderr,"\nNumber of random forest trees must be at least 10");
     stop = 1;
   }
+  if (rfmix_opts.bootstrap_mode < 0 || rfmix_opts.bootstrap_mode >= N_RF_BOOTSTRAP) {
+    fprintf(stderr,"\nBootstrap mode (-b) out of valid range - see manual");
+    stop = 1;
+  }
+  
   if (rfmix_opts.n_threads < 1) rfmix_opts.n_threads = 1;
   if (strcmp(rfmix_opts.chromosome,"") == 0) {
     fprintf(stderr,"\nSpecify VCF chromosome to analyze with -c option");

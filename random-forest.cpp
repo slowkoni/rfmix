@@ -17,7 +17,6 @@
 
 extern rfmix_opts_t rfmix_opts;
 
-#define THREAD_WINDOW_CHUNK_SIZE (3)
 typedef struct {
   input_t *input;
   int next_window;
@@ -34,6 +33,12 @@ typedef struct {
 } wsample_t;
 
 typedef struct {
+  int *haplotype;
+  double *current_p;
+  int max_idx;
+} ref_haplotype_t;
+
+typedef struct {
   int idx;
   int rng_idx;
   int n_snps;
@@ -43,10 +48,11 @@ typedef struct {
   wsample_t *query_samples;
 
   int n_ref_haplotypes;
-  int **ref_haplotypes;
+  ref_haplotype_t *ref_haplotypes;
 
   int n_subpops;
-  double **current_p;
+  int *n_ref_haplotypes_by_subpop;
+  int **ref_haplotype_list;
 } window_t;
 
 /* In version 2 of RFMIX, an explicit tree structure is built classifying the
@@ -379,6 +385,50 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
   return node;
 }
 
+static void flat_bootstrap(tree_t *tree, window_t *window) {
+  int i;
+  for(i=0; i < window->n_ref_haplotypes; i++) {
+    int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx++, 0, window->n_ref_haplotypes);
+
+    tree->haplotypes[i] = window->ref_haplotypes[j].haplotype;
+    tree->current_p[i] = window->ref_haplotypes[j].current_p;
+  }
+  tree->n_haplotypes = i;
+}
+
+static void hierarchical_bootstrap(tree_t *tree, window_t *window) {
+  int i;
+  
+  tree->n_haplotypes = 0;
+  for(i=0; i < window->n_ref_haplotypes; i++) {
+    int k = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx++, 0, window->n_subpops);
+    int n = window->n_ref_haplotypes_by_subpop[k];
+    int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx++, 0, n);
+    int h = window->ref_haplotype_list[k][j];
+
+    tree->haplotypes[i] = window->ref_haplotypes[h].haplotype;
+    tree->current_p[i] = window->ref_haplotypes[h].current_p;
+  }
+  tree->n_haplotypes = i;
+}
+
+static void stratified_bootstrap(tree_t *tree, window_t *window) {
+
+  int h = 0;
+  for(int k=0; k < window->n_subpops; k++) {
+    int n = window->n_ref_haplotypes_by_subpop[k];
+    for(int i=0; i < n; i++) {
+      int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx, 0, n);
+
+      tree->haplotypes[h] = window->ref_haplotypes[j].haplotype;
+      tree->current_p[h] = window->ref_haplotypes[j].current_p;
+      h++;
+    }
+  }
+  tree->n_haplotypes = h;
+  
+}
+
 /* An essential part of the random forest method is that each tree has a "bootstrapped" random 
    selection, with replacement, of haplotypes. Some haplotypes may be represented 2 or more 
    times, others none, but which ones are different for each tree. This will produce different
@@ -388,21 +438,27 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
    from but rather artifacts of the random sampling process. This is like how the mean of a
    randomly drawn sample estimates, but typically does not equal, the mean of the entire
    population. */
-static void bootstrap_haplotypes(tree_t *tree, window_t *window, mm *ma) {
-  int i;
-
+static void bootstrap_haplotypes(input_t *input, tree_t *tree, window_t *window, mm *ma) {
   tree->haplotypes = (int **) ma->allocate(sizeof(int *)*window->n_ref_haplotypes, WHEREFROM);
   tree->current_p = (double **) ma->allocate(sizeof(double *)*window->n_ref_haplotypes, WHEREFROM);
-  for(i=0; i < window->n_ref_haplotypes; i++) {
-    int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx++, 0, window->n_ref_haplotypes);
-
-    tree->haplotypes[i] = window->ref_haplotypes[j];
-    tree->current_p[i] = window->current_p[j];
+  switch(rfmix_opts.bootstrap_mode) {
+  case RF_BOOTSTRAP_FLAT:
+    flat_bootstrap(tree, window);
+    break;
+  case RF_BOOTSTRAP_HIERARCHICAL:
+    hierarchical_bootstrap(tree, window);
+    break;
+  case RF_BOOTSTRAP_STRATIFIED:
+    stratified_bootstrap(tree, window);
+    break;
+  default:
+    fprintf(stderr,"Runtime error: Unknown bootstrap mode %d in random forest\n", rfmix_opts.bootstrap_mode);
+    break;
   }
-  tree->n_haplotypes = i;
 }
 
-static tree_t *build_tree(window_t *window, md5rng *rng, mm *ma) {
+
+static tree_t *build_tree(input_t *input, window_t *window, md5rng *rng, mm *ma) {
   int i;
   tree_t *tree = (tree_t *) ma->allocate(sizeof(tree_t), WHEREFROM);
 
@@ -415,7 +471,7 @@ static tree_t *build_tree(window_t *window, md5rng *rng, mm *ma) {
   tree->rng_idx = window->rng_idx;
 
   /* Randomly select, with replacement, reference haplotypes for this tree. See above. */
-  bootstrap_haplotypes(tree, window, ma);
+  bootstrap_haplotypes(input, tree, window, ma);
   int *ref_q = (int *) ma->allocate(sizeof(int)*tree->n_haplotypes, WHEREFROM);
   for(i=0; i < tree->n_haplotypes; i++)
     ref_q[i] = i;
@@ -530,25 +586,70 @@ static void setup_query_sample(wsample_t *wsample, sample_t *sample, int n_subpo
   }
 }
 
-static void setup_ref_haplotype(int **ref_haplotypes, double **current_p, int n_subpops,
-				int w, sample_t *sample, int snp_start, int snp_end,
-				mm *ma) {
-  int s, t;
+static void setup_ref_haplotypes(window_t *w, input_t *input, int start_snp, int end_snp,
+				 mm *ma) {
+  int i, k, h;
 
-  ref_haplotypes[0] = (int *) ma->allocate(sizeof(int)*(snp_end - snp_start + 1), WHEREFROM);
-  ref_haplotypes[1] = (int *) ma->allocate(sizeof(int)*(snp_end - snp_start + 1), WHEREFROM);
-  for(s=snp_start,t=0; s <= snp_end; s++,t++) {
-    ref_haplotypes[0][t] = sample->haplotype[0][s];
-    ref_haplotypes[1][t] = sample->haplotype[1][s];
+  int window_idx = w->idx;
+  int n_samples = input->n_samples;
+  int n_subpops = input->n_subpops;
+  int n_snps = end_snp - start_snp + 1;
+  sample_t *samples = input->samples;
+  
+  double *p_tmp = new double[input->n_subpops];
+  
+  ref_haplotype_t *rh = (ref_haplotype_t *) ma->allocate(sizeof(ref_haplotype_t)*input->n_samples*2, WHEREFROM);
+  int *n_by_subpop = (int *) ma->allocate(sizeof(int)*n_subpops, WHEREFROM);
+  for(k=0; k < n_subpops; k++) n_by_subpop[k] = 0;
+
+  int nrh = 0;
+  for(i=0; i < n_samples; i++) {
+    for(h=0; h < 2; h++) {
+
+      // unpack the haplotype's current_p and find the subpop with the max probability
+      int max = 0;
+      for(k=0; k < n_subpops; k++) {
+	p_tmp[k] = DF16(samples[i].current_p[h][ IDX(window_idx, k) ]);
+	if (p_tmp[k] > p_tmp[max]) max = k;
+      }
+
+      // If this haplotype is suitable for use as reference, add it
+      if (p_tmp[max] > P_MINIMUM_FOR_REF) {
+	rh[nrh].haplotype = (int *) ma->allocate(sizeof(int)*n_snps, WHEREFROM);
+	rh[nrh].current_p = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
+	
+	/* copy out the alleles */
+	for(int s = start_snp, t=0; s <= end_snp; s++, t++)
+	  rh[nrh].haplotype[t] = (int) samples[i].haplotype[h][s];
+	/* copy over the current_p that we already unpacked */
+	for(int k=0; k < n_subpops; k++)
+	  rh[nrh].current_p[k] = p_tmp[k];
+	rh[nrh].max_idx = max;
+	
+	n_by_subpop[max]++;
+	nrh++;
+      }
+    }
+  }
+
+  int **subpop_rh_list = (int **) ma->allocate(sizeof(int *)*n_subpops, WHEREFROM);
+  int c[n_subpops];
+  for(k=0; k < n_subpops; k++) {
+    subpop_rh_list[k] = (int *) ma->allocate(sizeof(int)*n_by_subpop[k], WHEREFROM);
+    c[k] = 0;
+  }
+  for(i=0; i < nrh; i++) {
+    k = rh[i].max_idx;
+    subpop_rh_list[k][ c[k]++ ] = i;
   }
   
-  for(int k=0; k < n_subpops; k++) {
-    current_p[0][k] = DF16(sample->current_p[0][ IDX(w,k) ]);
-    current_p[1][k] = DF16(sample->current_p[1][ IDX(w,k) ]);
-  }
+  w->ref_haplotypes = rh;
+  w->n_ref_haplotypes = nrh;
+  w->n_ref_haplotypes_by_subpop = n_by_subpop;
+  w->ref_haplotype_list = subpop_rh_list;
 }
 
-				
+
 static void *random_forest_thread(void *targ) {
   thread_args_t *args = (thread_args_t *) targ;
   input_t *input = args->input;
@@ -559,12 +660,9 @@ static void *random_forest_thread(void *targ) {
   mm *ma = new mm(16, WHEREFROM);
   
   window.n_query_samples = 0;
-  window.n_ref_haplotypes = 0;
   for(i=0; i < input->n_samples; i++) {
     if (input->samples[i].apriori_subpop == -1)
       window.n_query_samples++;
-    else
-      window.n_ref_haplotypes += 2;
   }
 
   /* This memory allocation will not need to be done and redone with every window.
@@ -577,11 +675,6 @@ static void *random_forest_thread(void *targ) {
     for(int j=1; j < 4; j++)
       window.query_samples[i].est_p[j] = window.query_samples[i].est_p[j-1] + n_subpops;
   }
-  MA(window.ref_haplotypes, sizeof(int *)*window.n_ref_haplotypes, int *);
-  MA(window.current_p, sizeof(double *)*window.n_ref_haplotypes, double *);
-  MA(window.current_p[0], sizeof(double)*window.n_ref_haplotypes*n_subpops, double);
-  for(i=1; i < window.n_ref_haplotypes; i++)
-    window.current_p[i] = window.current_p[i-1] + n_subpops;
   
   /* args object is always locked at the loop start point or when loop exits */
   pthread_mutex_lock(&args->lock);
@@ -589,7 +682,7 @@ static void *random_forest_thread(void *targ) {
     
     /* Get the next chunk of windows to process and unlock the shared args object */
     int start_window = args->next_window;
-    int end_window = start_window + THREAD_WINDOW_CHUNK_SIZE;
+    int end_window = start_window + RF_THREAD_WINDOW_CHUNK_SIZE;
     if (end_window > input->n_windows) end_window = input->n_windows;
     args->next_window = end_window;
     pthread_mutex_unlock(&args->lock);
@@ -613,26 +706,20 @@ static void *random_forest_thread(void *targ) {
 	      crf->rf_end_idx);
 #endif
       int q = 0;
-      int r = 0;
       for(i=0; i < input->n_samples; i++) {
 	if (input->samples[i].apriori_subpop == -1) {
 	  window.query_samples[q].sample_idx = i;
 	  setup_query_sample(window.query_samples + q, input->samples + i, n_subpops,
 			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
 	  q++;
-	} else {
-	  setup_ref_haplotype(window.ref_haplotypes + r, window.current_p + r, n_subpops,
-			      w, input->samples + i, crf->rf_start_idx, crf->rf_end_idx, ma);
-	  r += 2;
 	}
       }
+      setup_ref_haplotypes(&window, input, crf->rf_start_idx, crf->rf_end_idx, ma);
 
-      /* Call window function to process the window */
-      
       /* Build trees */
       tree_t **trees = (tree_t **) ma->allocate(sizeof(tree_t *)*rfmix_opts.n_trees, WHEREFROM);
       for(i=0; i < rfmix_opts.n_trees; i++)
-	trees[i] = build_tree(&window, args->rng, ma);
+	trees[i] = build_tree(input, &window, args->rng, ma);
 
 #if 0
       pthread_mutex_lock(&args->lock);
@@ -681,9 +768,6 @@ static void *random_forest_thread(void *targ) {
 
   delete ma;
 
-  free(window.current_p[0]);
-  free(window.current_p);
-  free(window.ref_haplotypes);
   for(i=0; i < window.n_query_samples; i++) 
     free(window.query_samples[i].est_p[0]);
   free(window.query_samples);

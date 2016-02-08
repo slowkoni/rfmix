@@ -1,6 +1,7 @@
 #ifndef RFMIX_H
 #define RFMIX_H
 
+#include <vector>
 #include "genetic-map.h"
 #include "hash-table.h"
 
@@ -65,6 +66,8 @@ typedef struct {
   int n_trees;
   int reanalyze_reference;
   int em_iterations;
+  int bootstrap_mode;
+  int minimum_snps;
   
   int n_threads;
   char *chromosome;
@@ -140,6 +143,10 @@ typedef struct {
 
 /* This can be anything. The value I put here I pulled out of my backside. */
 #define RFOREST_RNG_KEY 0x949FC1AD
+enum { RF_BOOTSTRAP_FLAT=0, RF_BOOTSTRAP_HIERARCHICAL, RF_BOOTSTRAP_STRATIFIED, N_RF_BOOTSTRAP };
+
+#define P_MINIMUM_FOR_REF (0.8)
+#define RF_THREAD_WINDOW_CHUNK_SIZE (3)
 
 void crf(input_t *input);
 
