@@ -28,7 +28,7 @@ typedef struct {
 
 
 static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows,
-		    int n_windows, int n_subpops, mm *ma) {
+		      int n_windows, int n_subpops, snp_t *snps, mm *ma) {
   int i, j, k;
 
   /* Decode the estimated probabilities from random forest and cache in an array
@@ -61,7 +61,7 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
 
   for(i=1; i < n_windows; i++) {
     double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
-    double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)));
+    double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops-1);
     double log_rcb = log(rcb);
     double log_nrcb = log(1.0 - rcb);
       
@@ -70,7 +70,7 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
 
       max_state = -1; max_d = -DBL_MAX;
       for(k=0; k < n_subpops; k++) {
-	double tmp_d = d[k] + p_obs + ( (j==k) ? log_nrcb : (log_rcb) );
+	double tmp_d = d[k] + p_obs + ( (j==k) ? log_nrcb : log_rcb );
 	if (tmp_d > max_d) {
 	  max_state = k;
 	  max_d = tmp_d;
@@ -235,7 +235,7 @@ static void *crf_thread(void *targ) {
       if (input->samples[i].apriori_subpop != -1) continue;
       for(int h=0; h < 4; h++) {
 	logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
-		       input->n_subpops, ma);
+		       input->n_subpops, input->snps, ma);
 	if (h < 2) total_logl += logl;
 	forward_backward(input->samples + i, h, input->crf_windows, input->n_windows,
 			 input->n_subpops, ma);

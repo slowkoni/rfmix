@@ -64,6 +64,7 @@ static void load_samples(input_t *input) {
      the data value stored in the hash table, because the samples array may be
      copied to a new location when extended by RA() (realloc). */
   HashTable *sample_hash = new HashTable(256);
+  HashTable *tmp_hash = new HashTable(256); // used to check if sample defined in sample map is in reference VCF
   samples = NULL;
   n_samples = 0;
   
@@ -89,6 +90,24 @@ static void load_samples(input_t *input) {
   }
   delete qvcf; 
 
+  /* Parse up the column header from the reference VCF to see what reference
+     samples are actually in the file. Then, we will only define a sample in
+     the program's sample array if in fact that sample is present in the
+     reference. Otherwise, extraneous samples defined in the sample map cause
+     havoc if they are never actually loaded from the reference. This does happen
+     if a common sample map is used for different reference VCFs where certain
+     subpopulations have simply not been included. */
+  Inputline *rvcf = new Inputline(rfmix_opts.rvcf_fname, rfmix_opts.chromosome);
+  p = vcf_skip_headers(rvcf);
+
+  CHOMP(p);
+  for(i=0; i < 9; i++) strsep(&p, "\t");
+  while((sample_id = strsep(&p, "\t")) != NULL) {
+    tmp_hash->insert(sample_id, sample_id);
+  }
+
+  delete rvcf;
+  
   /* Now load sample ids from the sample map file */
   Inputline *f = new Inputline(rfmix_opts.class_fname, rfmix_opts.chromosome);
 
@@ -99,6 +118,8 @@ static void load_samples(input_t *input) {
 
     sample_id = strsep(&p, "\t");
     if (sample_id[0] == 0) continue;
+    /* Do not define a sample entry if the sample is not in the reference vcf */
+    if (tmp_hash->lookup(sample_id) == NULL) continue;
     
     reference_pop = strsep(&p, "\t");
     if (reference_pop[0] == 0) continue;
@@ -147,7 +168,9 @@ static void load_samples(input_t *input) {
      essentially everywhere through that */
   input->samples = samples;
   input->n_samples = n_samples;
-  input->sample_hash = sample_hash;  
+  input->sample_hash = sample_hash;
+
+  delete tmp_hash;
 }
 
 static void skip_to_chromosome(Inputline *vcf, char *chm) {

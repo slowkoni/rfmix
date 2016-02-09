@@ -182,6 +182,7 @@ int main(int argc, char *argv[]) {
   cmdline_getoptions(options, argc, argv);
   verify_options();
 
+  fprintf(stderr,"\n");
   input_t *rfmix_input = load_input();
 
   random_forest(rfmix_input);
