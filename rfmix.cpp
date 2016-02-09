@@ -4,6 +4,8 @@
 #include <errno.h>
 
 #include <unistd.h>
+#include <float.h>
+#include <limits.h>
 #include <time.h>
 
 #include "cmdline-utils.h"
@@ -45,6 +47,10 @@ static option_t options[] = {
       "After first iteration, include reference panel in analysis and reclassify" },
   { 'b', "bootstrap-mode", &rfmix_opts.bootstrap_mode, OPT_INT, 0, 1,
     "Specify random forest bootstrap mode as integer code (see manual)" },
+  { 0, "rf-minimum-snps", &rfmix_opts.minimum_snps, OPT_INT, 0, 1,
+    "With genetic sized rf windows, include at least this many SNPs regardless of span" },
+  { 0, "analyze-range", &rfmix_opts.analyze_str, OPT_STR, 0, 1,
+    "Physical position range, specified as <start pos>-<end pos>, in Mbp (decimal allowed)" },
   
   /* Runtime execution control options (only specifies how the program runs)*/
   { 0, "n-threads", &rfmix_opts.n_threads, OPT_INT, 0, 1,
@@ -73,6 +79,9 @@ static void init_options(void) {
   rfmix_opts.bootstrap_mode = 1;
   rfmix_opts.em_iterations = 0;
   rfmix_opts.minimum_snps = 10;
+  rfmix_opts.analyze_str = (char *) "";
+  rfmix_opts.analyze_range[0] = INT_MIN;
+  rfmix_opts.analyze_range[1] = INT_MAX;
   
   rfmix_opts.n_threads = sysconf(_SC_NPROCESSORS_CONF);
   rfmix_opts.chromosome = (char *) "";
@@ -128,6 +137,21 @@ static void verify_options(void) {
   if (rfmix_opts.bootstrap_mode < 0 || rfmix_opts.bootstrap_mode >= N_RF_BOOTSTRAP) {
     fprintf(stderr,"\nBootstrap mode (-b) out of valid range - see manual");
     stop = 1;
+  }
+  if (strcmp(rfmix_opts.analyze_str, "") != 0) {
+    char *p, *start, *end;
+    end = p = strdup(rfmix_opts.analyze_str);
+    start = strsep(&end,"-");
+    if (start == NULL || end == NULL) {
+      fprintf(stderr,"Invalid physical range to analyze (--analyze-range)\n");
+      stop = 1;
+    } else {
+      rfmix_opts.analyze_range[0] = atof(start)*1e6;
+      rfmix_opts.analyze_range[1] = atof(end)*1e6;
+      fprintf(stderr,"NOTICE: Analysis restricted to positions in range %d to %d\n", rfmix_opts.analyze_range[0],
+	      rfmix_opts.analyze_range[1]);
+    }
+    free(p);
   }
   
   if (rfmix_opts.n_threads < 1) rfmix_opts.n_threads = 1;

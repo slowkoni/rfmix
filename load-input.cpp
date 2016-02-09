@@ -3,6 +3,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include <float.h>
+
 #include "kmacros.h"
 #include "rfmix.h"
 #include "genetic-map.h"
@@ -277,6 +279,12 @@ static void identify_common_snps(input_t *input) {
     if (r_pos == -1 || strcmp(r_chm, rfmix_opts.chromosome) != 0) break;
 
     if (q_pos == r_pos) {
+      if (q_pos < rfmix_opts.analyze_range[0] || q_pos > rfmix_opts.analyze_range[1]) {
+	pq = get_next_snp(qvcf, &q_chm, &q_pos);      
+	pr = get_next_snp(rvcf, &r_chm, &r_pos);
+	continue;
+      }
+      
       /* Discard SNPs with too much missing data in either the query or the
 	 reference files. If desired, insert minor allele frequency or minor
          allele count filters here */
@@ -414,72 +422,131 @@ static void load_alleles(input_t *input) {
 }
 
 #define WINDOW_ALLOC_STEP 128
+static void layout_random_forest(crf_window_t *crf, int n_crf, snp_t *snps, int n_snps,
+				 double rf_spacing) {
+  int minimum_snps = rfmix_opts.minimum_snps;
+  int rf_start, rf_end;
+  double s_gain, e_gain;
+
+  /* spacing size less than 2.0 (limit could be larger) is intepreted as meaning a genetic window
+     size in cM. Otherwise, it means a fixed number of SNPs. In either case, we widen the RF window
+     by one SNP to the left or the right, which ever side would increase the genetic size of the 
+     window the least. Thus, SNPs in the window are closest to the CRF window position taken as 
+     the center point */
+  if (rf_spacing <= 2.0) {  
+    for(int w=0; w < n_crf; w++) {
+      rf_start = crf[w].snp_idx;
+      rf_end = crf[w].snp_idx;
+      while((rf_start > 0 || rf_end < n_snps - 1) &&
+	    (snps[rf_end].genetic_pos - snps[rf_start].genetic_pos < rf_spacing ||
+	     rf_end - rf_start < rfmix_opts.minimum_snps)) {
+	double last_window_size = snps[rf_end].genetic_pos - snps[rf_start].genetic_pos;
+
+	s_gain = rf_start > 0 ? snps[rf_start].genetic_pos - snps[rf_start-1].genetic_pos : DBL_MAX;
+	e_gain = rf_end < n_snps - 1 ? snps[rf_end+1].genetic_pos - snps[rf_end].genetic_pos : DBL_MAX;
+	if (s_gain < e_gain) {
+	  if (rf_spacing - last_window_size < s_gain && rf_end - rf_start >= minimum_snps) break; 
+	  rf_start--;
+	} else {
+	  if (rf_spacing - last_window_size < e_gain && rf_end - rf_start >= minimum_snps) break;
+	  rf_end++;
+	}
+
+	if (rf_end - rf_start >= 500) break;
+      }
+
+      if (w > 0 && rf_start > crf[w-1].rf_end_idx + 1) rf_start = crf[w-1].rf_end_idx + 1;
+      crf[w].rf_start_idx = rf_start;
+      crf[w].rf_end_idx = rf_end;
+    }
+  } else {
+    for(int w=0; w < n_crf; w++) {
+      rf_start = crf[w].snp_idx - rf_spacing / 2;
+      if (rf_start < 0) rf_start = 0;
+      rf_end = crf[w].snp_idx + rf_spacing / 2;
+      if (rf_end >= n_snps) rf_end = n_snps;
+
+      if (w > 0 && rf_start > crf[w-1].rf_end_idx + 1) rf_start = crf[w-1].rf_end_idx + 1;
+      /*      while((rf_start > 0 || rf_end < n_snps - 1) && rf_end - rf_start < rf_spacing) {
+
+	s_gain = rf_start > 0 ? snps[rf_start].genetic_pos - snps[rf_start-1].genetic_pos : DBL_MAX;
+	e_gain = rf_end < n_snps - 1 ? snps[rf_end+1].genetic_pos - snps[rf_end].genetic_pos : DBL_MAX;
+	if (s_gain < e_gain) {
+	  rf_start--;
+	} else {
+	  rf_end++;
+	}
+	}*/
+
+      crf[w].rf_start_idx = rf_start;
+      crf[w].rf_end_idx = rf_end;
+    }
+  }
+  
+}
 static void set_crf_points(input_t *input) {
+
+  fprintf(stderr,"\n   setting up CRF points and random forest windows... ");
 
   /* Local variable is needed for IDX(window,subpop) macro */
   int n_subpops = input->n_subpops;
+  snp_t *snps = input->snps;
+  int n_snps = input->n_snps;
   
   /* Determine the number of defined CRF points we have (CRF windows), the
      central SNP that defines each one, and the boundaries of the larger
      window used to source SNPs for the random forest classification */
-  fprintf(stderr,"\n   setting up CRF points and random forest windows... ");
+  int w = 0;
   input->n_windows = 0;
   input->crf_windows = NULL;
-
-  int rf_start, rf_end;
-  int i = 0;
-  int j = 0;
-  while(j < input->n_snps) {
-    if (i % WINDOW_ALLOC_STEP == 0)
-      RA(input->crf_windows, sizeof(crf_window_t)*(i + WINDOW_ALLOC_STEP), crf_window_t);
-
-    input->crf_windows[i].snp_idx = j;
-    input->crf_windows[i].genetic_pos = input->snps[j].genetic_pos / 100.;
-
-    if (rfmix_opts.rf_window_size < 2.0) {
-      double half_window = rfmix_opts.rf_window_size / 2.;
-
-      rf_start = input->crf_windows[i].snp_idx;
-      while(rf_start > 0 && input->crf_windows[i].snp_idx - rf_start < 250 &&
-	    input->snps[j].genetic_pos - input->snps[rf_start].genetic_pos < half_window)
-	rf_start--;
-      if (i > 0)
-	while(rf_start > input->crf_windows[i-1].rf_end_idx + 1) rf_start--;
-      
-      rf_end = input->crf_windows[i].snp_idx;
-      while(rf_end < input->n_snps - 1 && rf_end - input->crf_windows[i].snp_idx < 250 &&
-	    input->snps[rf_end].genetic_pos - input->snps[j].genetic_pos < half_window) rf_end++;
-      if (i == input->n_windows - 1) rf_end = input->n_snps - 1;
-    } else {
-
-      rf_start = j - rfmix_opts.rf_window_size / 2;
-      
-      rf_end = rf_start + rfmix_opts.rf_window_size - 1;
-      if (rf_start < 0) rf_start = 0;
-
-      if (rf_end >= input->n_snps) {
-	rf_end = input->n_snps - 1;
-	rf_start = rf_end - rfmix_opts.rf_window_size + 1;
-	if (rf_start < 0) rf_start = 0;
-      }
-    }
+  
+  if (rfmix_opts.crf_spacing < 1.0) {
     
-    input->crf_windows[i].rf_start_idx = rf_start;
-    input->crf_windows[i].rf_end_idx = rf_end;
+    MA(input->crf_windows, sizeof(crf_window_t)*(WINDOW_ALLOC_STEP), crf_window_t);
+    input->crf_windows[0].genetic_pos = snps[0].genetic_pos;
+    input->crf_windows[0].snp_idx = 0;
 
-    if (rfmix_opts.crf_spacing < 1.0) {
-      double current_pos = input->crf_windows[i].genetic_pos * 100.; // Need in cM not M
-      j++;
-      while(j < input->n_snps && j - input->crf_windows[i].snp_idx < 500 &&
-	    input->snps[j].genetic_pos - current_pos < rfmix_opts.crf_spacing) j++;
-    } else {
-      j += rfmix_opts.crf_spacing;
+    w = 1;
+    int s = 0;    
+    while(s < n_snps - 1) {
+      double target_pos = snps[s].genetic_pos + rfmix_opts.crf_spacing;
+      if (snps[n_snps-1].genetic_pos - target_pos < rfmix_opts.crf_spacing / 2.)
+	target_pos = snps[n_snps-1].genetic_pos;
+
+      int t = s + 1;
+      while(t < n_snps - 1 && snps[t].genetic_pos < target_pos) t++;
+	    
+      if (target_pos < snps[n_snps-1].genetic_pos && s - t > 1 && t < n_snps - 1 &&
+	  snps[t].genetic_pos - target_pos < target_pos - snps[t-1].genetic_pos) t--;
+
+      if (w % WINDOW_ALLOC_STEP == 0)
+	RA(input->crf_windows, sizeof(crf_window_t)*(w + WINDOW_ALLOC_STEP), crf_window_t);
+
+      input->crf_windows[w].snp_idx = t;
+      input->crf_windows[w].genetic_pos = snps[t].genetic_pos;
+      w++;
+      s = t;
     }
-    i++;
+    input->n_windows = w;
+  } else {
+    int s = 0;
+    while(s < n_snps) {
+      if (w % WINDOW_ALLOC_STEP == 0)
+	RA(input->crf_windows, sizeof(crf_window_t)*(w + WINDOW_ALLOC_STEP), crf_window_t);
+
+      input->crf_windows[w].snp_idx = s;
+      input->crf_windows[w].genetic_pos = snps[s].genetic_pos;
+      w++;
+      
+      s += rfmix_opts.crf_spacing;
+    }
   }
-  input->crf_windows[i-1].rf_end_idx = input->n_snps - 1;
-  input->n_windows = i;
-  fprintf(stderr,"done\n");
+  input->n_windows = w;
+
+  fprintf(stderr,"\n   computing random forest window spacing overlay... ");
+  layout_random_forest(input->crf_windows, input->n_windows, snps, n_snps, rfmix_opts.rf_window_size);
+  /* Convert cM to M as we will always need in M in the CRF */
+  for(w=0; w < input->n_windows; w++) input->crf_windows[w].genetic_pos /= 100.;
   
   /* Set up and initialize the current (starting) marginal probabilities for subpop
      assignment for each haplotype at each CRF window. These values start as 100%
@@ -487,7 +554,7 @@ static void set_crf_points(input_t *input) {
      individuals, and just initialized to zero for all query individuals. These are
      calculated at each EM iteration by the Forward-Backward algorithm in the
      conditional random field code */
-  fprintf(stderr,"   initializing apriori reference subpop across CRF... ");
+  fprintf(stderr,"\n   initializing apriori reference subpop across CRF... ");
   for(int k=0; k < input->n_samples; k++) {
     sample_t *sample = input->samples + k;
     
@@ -504,9 +571,8 @@ static void set_crf_points(input_t *input) {
       }
     }
   }
-  fprintf(stderr,"done\n");
 
-  fprintf(stderr,"   setting up random forest probability estimation arrays... ");
+  fprintf(stderr,"\n   setting up random forest probability estimation arrays... ");
   for(int k=0; k < input->n_samples; k++) {
     sample_t *sample = input->samples + k;
 

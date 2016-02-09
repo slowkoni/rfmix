@@ -68,6 +68,8 @@ typedef struct {
   int em_iterations;
   int bootstrap_mode;
   int minimum_snps;
+  int analyze_range[2];
+  char *analyze_str;
   
   int n_threads;
   char *chromosome;
