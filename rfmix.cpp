@@ -51,6 +51,8 @@ static option_t options[] = {
     "With genetic sized rf windows, include at least this many SNPs regardless of span" },
   { 0, "analyze-range", &rfmix_opts.analyze_str, OPT_STR, 0, 1,
     "Physical position range, specified as <start pos>-<end pos>, in Mbp (decimal allowed)" },
+  { 0, "crf-weight", &rfmix_opts.crf_weight, OPT_DBL, 0, 1,
+    "Weight of observation term relative to transition term in conditional random field" },
   
   /* Runtime execution control options (only specifies how the program runs)*/
   { 0, "n-threads", &rfmix_opts.n_threads, OPT_INT, 0, 1,
@@ -82,6 +84,7 @@ static void init_options(void) {
   rfmix_opts.analyze_str = (char *) "";
   rfmix_opts.analyze_range[0] = INT_MIN;
   rfmix_opts.analyze_range[1] = INT_MAX;
+  rfmix_opts.crf_weight = 1.0;
   
   rfmix_opts.n_threads = sysconf(_SC_NPROCESSORS_CONF);
   rfmix_opts.chromosome = (char *) "";

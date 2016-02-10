@@ -70,6 +70,7 @@ typedef struct {
   int minimum_snps;
   int analyze_range[2];
   char *analyze_str;
+  double crf_weight;
   
   int n_threads;
   char *chromosome;
