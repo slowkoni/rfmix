@@ -535,3 +535,21 @@ double HashTable::collision_ratio(void) {
   return ht_collision_ratio(ht);
 }
 
+char *HashTable::nextkey(void) {
+  int unused;
+  return ht_nextkey(ht, &unused);
+}
+
+void *HashTable::nextitem(void) {
+  char *key;
+  int key_length;
+  return ht_nextitem(ht, &key, &key_length);
+}
+
+void HashTable::reset(void) {
+  ht_reset(ht);
+}
+
+int HashTable::n_items(void) {
+  return ht->occupied;
+}

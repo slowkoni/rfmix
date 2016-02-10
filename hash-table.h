@@ -43,6 +43,10 @@ class HashTable {
   void *lookup(char *key);
   void remove(char *key);
   double collision_ratio();
+  void reset();
+  char *nextkey();
+  void *nextitem();
+  int n_items();
   
  private:
   hash_table_t *ht;

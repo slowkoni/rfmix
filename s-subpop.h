@@ -13,6 +13,7 @@ class Subpop {
   static int n_subpops;
   static Subpop *lookup_sample_subpop(char *sample_name);
   static Subpop *lookup_subpop(char *subpop_name);
+  static void set_ordering(void);
  private:
 
   static HashTable *subpop_map;

@@ -107,14 +107,65 @@ static void load_samples(input_t *input) {
   }
 
   delete rvcf;
-  
-  /* Now load sample ids from the sample map file */
+
+  /* This is an embarassing afterthought hack - this insists the subpopulation name
+     to index number goes in alphabetical order, always, for consistency even if the
+     sample map is reordered but otherwise the same. What is more likely to happen
+     is someone comments out a few samples causing the reference subpop names to
+     first appear to the program in a different order, resulting in different
+     indexing. To add this, I'm just scanning the entire sample map file first and
+     only recording the subpop names, sorting them, then letting the original loop
+     below scan the sample map for sample names and their subpops, find the subpop
+     is already defined, and use the array index of the sorted array. Just hold your
+     noses... this whole damn file needs a rewrite, not just this ugly hack */
   Inputline *f = new Inputline(rfmix_opts.class_fname, rfmix_opts.chromosome);
+
+  while((p = f->nextline(INPUTLINE_NOCOPY)) != NULL) {
+    
+    CHOMP(p);
+    if (p[0] == 0 || p[0] == '#' || p[0]=='^') continue;
+
+    sample_id = strsep(&p, "\t");
+    if (sample_id[0] == 0) continue;
+    /* Do not define a sample entry if the sample is not in the reference vcf */
+    if (tmp_hash->lookup(sample_id) == NULL) continue;
+    
+    reference_pop = strsep(&p, "\t");
+    if (reference_pop[0] == 0) continue;
+
+    /* Search for this reference subpop in the already known list */
+    for(i=0; i < input->n_subpops; i++)
+      if (strcasecmp(input->reference_subpops[i], reference_pop) == 0) break;
+      
+    /* Add the subpop name to the list of reference subpops if it is not found */
+    if (i == input->n_subpops) {
+      if (input->n_subpops % SUBPOP_ALLOC_STEP == 0)
+	RA(input->reference_subpops, sizeof(char *)*(input->n_subpops + SUBPOP_ALLOC_STEP), char *);
+      input->reference_subpops[input->n_subpops] = strdup(reference_pop);
+      input->n_subpops++;
+    }
+  }
+  delete f;
+
+  for(int i=0; i < input->n_subpops; i++) {
+    int m = i;
+    for(int j=i+1; j < input->n_subpops; j++)
+      if (strcmp(input->reference_subpops[j], input->reference_subpops[m]) < 0) m = j;
+    if (m != i) {
+      char *tmp;
+      tmp = input->reference_subpops[i];
+      input->reference_subpops[i] = input->reference_subpops[m];
+      input->reference_subpops[m] = tmp;
+    }
+  }
+  
+  /* Reopen the file and start over... sorry. */
+  f = new Inputline(rfmix_opts.class_fname, rfmix_opts.chromosome);
 
   /* Now scan the sample map file and determine the reference subpops and sample mapping to them */
   while((p = f->nextline(INPUTLINE_NOCOPY)) != NULL) {
     CHOMP(p);
-    if (p[0] == 0 || p[0] == '#') continue;
+    if (p[0] == 0 || p[0] == '#' || p[0] == '^') continue;
 
     sample_id = strsep(&p, "\t");
     if (sample_id[0] == 0) continue;
@@ -130,6 +181,8 @@ static void load_samples(input_t *input) {
       
     /* Add the subpop name to the list of reference subpops if it is not found */
     if (i == input->n_subpops) {
+      fprintf(stderr,"Warning: subpopulation %s should already be defined but it is not, "
+	      "subpopulation order\nin output not guaranteed to be alphabetical.\n", reference_pop);
       if (input->n_subpops % SUBPOP_ALLOC_STEP == 0)
 	RA(input->reference_subpops, sizeof(char *)*(input->n_subpops + SUBPOP_ALLOC_STEP), char *);
       input->reference_subpops[input->n_subpops] = strdup(reference_pop);

@@ -73,6 +73,12 @@ void msp_output(input_t *input) {
     exit(-1);
   }
   
+  fprintf(f,"#");
+  fprintf(f,"Subpopulation order/codes: %s=0", input->reference_subpops[0]);
+  for(int i=1; i < input->n_subpops; i++) {
+    fprintf(f,"\t%s=%d", input->reference_subpops[i], i);
+  }
+  fprintf(f,"\n");
   fprintf(f,"#chm\tspos\tepos\tsgpos\tegpos\tn snps");
   for(int j=0; j < input->n_samples; j++) {
     sample_t *sample = input->samples + j;
@@ -116,7 +122,13 @@ void fb_output(input_t *input) {
     exit(-1);
   }
   
-  fprintf(f,"#chm\tpos\tgpos");
+  fprintf(f,"#");
+  fprintf(f,"Subpopulation order: %s", input->reference_subpops[0]);
+  for(int i=1; i < input->n_subpops; i++) {
+    fprintf(f,"\t%s", input->reference_subpops[i]);
+  }
+  fprintf(f,"\n");
+  fprintf(f,"#chm\tpos\tgpos\tsnp idx");
   for(int j=0; j < input->n_samples; j++) {
     sample_t *sample = input->samples + j;
     if (sample->apriori_subpop != -1) continue;
@@ -126,8 +138,8 @@ void fb_output(input_t *input) {
   fprintf(f,"\n");
 
   for(int i=0; i < input->n_windows; i++) {
-    fprintf(f,"%s\t%d\t%1.2f", rfmix_opts.chromosome, input->snps[input->crf_windows[i].snp_idx].pos,
-	    input->crf_windows[i].genetic_pos*100.);
+    fprintf(f,"%s\t%d\t%1.5f\t%d", rfmix_opts.chromosome, input->snps[input->crf_windows[i].snp_idx].pos,
+    	    input->crf_windows[i].genetic_pos*100.,input->crf_windows[i].snp_idx);
     for(int j=0; j < input->n_samples; j++) {
       if (input->samples[j].apriori_subpop != -1) continue;
       for(int h=0; h < 2; h++) {
@@ -143,7 +155,6 @@ void fb_output(input_t *input) {
 
 #define SIS_EXTENSION ".sis.tsv"
 void fb_stay_in_state_output(input_t *input) {
-  fprintf(stderr,"Outputting Suyash-mode stay-in-state forward-backward results...  \n");
   int fname_length = strlen(rfmix_opts.output_basename) + strlen(SIS_EXTENSION) + 1;
   char fname[fname_length];
 
@@ -153,14 +164,14 @@ void fb_stay_in_state_output(input_t *input) {
     fprintf(stderr,"Can't open output file %s (%s)\n", fname, strerror(errno));
     exit(-1);
   }
-  fprintf(f,"#chm\tpos\tgpos");
+  fprintf(f,"#chm\tpos\tgpos\tsnp idx");
   for(int j=0; j < input->n_samples; j++)
     fprintf(f,"\t%s.0\t%s.1", input->samples[j].sample_id, input->samples[j].sample_id);
   fprintf(f,"\n");
   
   for(int i=0; i < input->n_windows - 1; i++) {
-    fprintf(f,"%s\t%d\t%1.2f", rfmix_opts.chromosome, input->snps[input->crf_windows[i].snp_idx].pos,
-	    input->crf_windows[i].genetic_pos*100.);    
+    fprintf(f,"%s\t%d\t%1.5f\t%d", rfmix_opts.chromosome, input->snps[input->crf_windows[i].snp_idx].pos,
+	    input->crf_windows[i].genetic_pos*100., input->crf_windows[i].snp_idx);    
     for(int j=0; j < input->n_samples; j++) {
       if (input->samples[j].apriori_subpop != -1) continue;
       fprintf(f,"\t%1.5f\t%1.5f", input->samples[j].sis_p[0][i], input->samples[j].sis_p[1][i]);

@@ -136,14 +136,15 @@ static void load_sample_subpop_map(char *fname) {
     char *p = buf;
     char *sample_name = strsep(&p, "\t");
     char *subpop_name = strsep(&p, "\t");
-
+    
     Subpop *s = Subpop::lookup_subpop(subpop_name);
     if (s == NULL) s = new Subpop(subpop_name);
 
     s->add_sample(sample_name);
   }
-
+  
   fclose(f);
+  Subpop::set_ordering();
 }
 
 int main(int argc, char *argv[]) {

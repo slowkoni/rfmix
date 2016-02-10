@@ -39,4 +39,42 @@ void Subpop::add_sample(char *sample_name) {
   Subpop::sample_map->insert(sample_name, this);
 }
 
+static void selection_sort(char **a, int n) {
+
+  for(int i=0; i < n; i++) {
+    int m = i;
+    for(int j=i+1; j < n; j++)
+      if (strcmp(a[j],a[m]) < 0) m = j;
+    if (m != i) {
+      char *tmp = a[i];
+      a[i] = a[m];
+      a[m] = tmp;
+    }
+  }
+}
+
+void Subpop::set_ordering(void) {
+  int n_subpops = subpop_map->n_items();
+  char **subpop_names = new char*[n_subpops];
+  
+  int i = 0;
+  char *key;
+  subpop_map->reset();
+  while((key = subpop_map->nextkey()) && i < n_subpops) {
+    subpop_names[i++] = key;
+  }
+
+  selection_sort(subpop_names, n_subpops);
+  for(i=0; i < n_subpops; i++) {
+    Subpop *s = lookup_subpop(subpop_names[i]);
+    s->idx = i;
+    fprintf(stderr,"%s\t%d\n", subpop_names[i], s->idx);
+  }
+  
+  
+  delete[] subpop_names;
+}
+    
+      
+
 
