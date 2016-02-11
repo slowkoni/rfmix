@@ -26,7 +26,7 @@ typedef struct {
   pthread_mutex_t lock;
 } thread_args_t;
 
-#define MIN_GD (0.00001)
+#define MIN_GD (0.0001)
 static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows,
 		      int n_windows, int n_subpops, snp_t *snps, mm *ma) {
   int i, j, k;
@@ -115,6 +115,21 @@ static void normalize_vector(double *p, int n) {
     p[k] /= sum_p;
 }
 
+static void lnormalize_vector(double *p, int n) {
+  double d = p[0];
+  for(int i=1; i < n; i++)
+    if (p[i] > d) d = p[i];
+
+  double pd_sum = 0.;
+  for(int i=0; i < n; i++) {
+    p[i] = exp(p[i] - d);
+    pd_sum += p[i];
+  }
+  
+  for(int i=0; i < n; i++)
+    p[i] = p[i]/pd_sum;  
+}
+
 static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_windows,
 			     int n_windows, int n_subpops, mm *ma) {
   int i, j, k;
@@ -129,16 +144,18 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   for(i=1; i < n_windows; i++) {
     double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
     if (gd < MIN_GD) gd = MIN_GD;
-    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
-    long double stay = pow(1.0 - change,1./rfmix_opts.crf_weight);
-    change = 1.0 - stay;
+    long double stay = exp(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
+    long double change = (1.0 - stay)/(n_subpops-1.);
+    //    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
+    //    long double stay = powl(1.0 - change,1./rfmix_opts.crf_weight);
+    //    change = 1.0 - stay;
     for(j=0; j < n_subpops; j++) {
       alpha[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
 	alpha[ IDX(i,j) ] += alpha[ IDX(i-1,k) ]*( (j==k) ? stay : change );
-      alpha[ IDX(i,j) ] = alpha[ IDX(i,j) ]*DF16(sample->est_p[haplotype][ IDX(i,j) ]);
+      alpha[ IDX(i,j) ] = logl(alpha[ IDX(i,j) ]) + logl(DF16(sample->est_p[haplotype][ IDX(i,j) ]));
     }
-    normalize_vector(alpha + i*n_subpops, n_subpops);
+    lnormalize_vector(alpha + i*n_subpops, n_subpops);
 #ifdef DEBUG
     fprintf(stderr,"sample %s  haplotype %d   window %5d", sample->sample_id, haplotype, i);
     for(k=0; k < n_subpops; k++)
@@ -155,15 +172,19 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   for(i=n_windows-2; i >=0 ; i--) {
     double gd = crf_windows[i+1].genetic_pos - crf_windows[i].genetic_pos;
     if (gd < MIN_GD) gd = MIN_GD;
-    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
-    long double stay = pow(1.0 - change,1./rfmix_opts.crf_weight);
-    change = 1.0 - stay;
+    long double stay = exp(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
+    long double change = (1.0 - stay)/(n_subpops-1.);
+    //    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
+    //    long double stay = powl(1.0 - change,1./rfmix_opts.crf_weight);
+    //    change = 1.0 - stay;
     for(j=0; j < n_subpops; j++) {
       beta[ IDX(i,j) ] = 0.;
-      for(k=0; k < n_subpops; k++)
-	beta[ IDX(i,j) ] +=  beta[ IDX(i+1,k) ]*DF16(sample->est_p[haplotype][ IDX(i+1,k) ])*( (j==k) ? stay : change );
+      for(k=0; k < n_subpops; k++) {
+	beta[ IDX(i,j) ] +=  expl(logl(beta[ IDX(i+1,k) ]) + logl(DF16(sample->est_p[haplotype][ IDX(i+1,k) ]))  + logl(( (j==k) ? stay : change )));
+      }
+      beta[ IDX(i,j) ] = log(beta[ IDX(i,j) ]);
     }
-    normalize_vector(beta + i*n_subpops, n_subpops);
+    lnormalize_vector(beta + i*n_subpops, n_subpops);
 #ifdef DEBUG
     fprintf(stderr,"sample %s  haplotype %d   window %5d pos %8.5f", sample->sample_id, haplotype, i,
 	    crf_windows[i].genetic_pos*100.);
@@ -177,13 +198,14 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
     double sum_p = 0.;
     double p[n_subpops];
     for(k=0; k < n_subpops; k++) {
-      p[k] = alpha[ IDX(i,k) ] * beta[ IDX(i,k) ];
-      if (p[k] < 0.) p[k] = 0.;
-      sum_p += p[k];
+      p[k] = log(alpha[ IDX(i,k) ]) + log(beta[ IDX(i,k) ]);
+      //      p[k] = alpha[ IDX(i,k) ] * beta[ IDX(i,k) ];
+      //      if (p[k] < 0.) p[k] = 0.;
+      //      sum_p += p[k];
     }
-
+    lnormalize_vector(p, n_subpops);
     for(k=0; k < n_subpops; k++) {
-      p[k] /= sum_p;
+      //      p[k] /= sum_p;
       sample->current_p[haplotype][ IDX(i,k) ] = ef16(p[k]);
     }
   }
