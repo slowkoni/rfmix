@@ -26,7 +26,7 @@ typedef struct {
   pthread_mutex_t lock;
 } thread_args_t;
 
-
+#define MIN_GD (0.00001)
 static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows,
 		      int n_windows, int n_subpops, snp_t *snps, mm *ma) {
   int i, j, k;
@@ -61,8 +61,9 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
 
   for(i=1; i < n_windows; i++) {
     double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
+    if (gd < MIN_GD) gd = MIN_GD;
     double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops-1);
-    double log_rcb = log(rcb);
+    double log_rcb = log(rcb) * rfmix_opts.crf_weight;
     double log_nrcb = log(1.0 - rcb);
       
     for(j=0; j < n_subpops; j++) {
@@ -127,11 +128,10 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
 
   for(i=1; i < n_windows; i++) {
     double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
-    double change = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
-    double stay = 1.0 - change;
-    //    double stay = pow(1.0 - (crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos),
-    //		      rfmix_opts.n_generations-1)/(n_subpops-1.);
-    //double change = 1.0 - stay;
+    if (gd < MIN_GD) gd = MIN_GD;
+    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
+    long double stay = pow(1.0 - change,1./rfmix_opts.crf_weight);
+    change = 1.0 - stay;
     for(j=0; j < n_subpops; j++) {
       alpha[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
@@ -154,11 +154,10 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   
   for(i=n_windows-2; i >=0 ; i--) {
     double gd = crf_windows[i+1].genetic_pos - crf_windows[i].genetic_pos;
-    double change = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
-    double stay = 1.0 - change;
-    //    double stay = pow(1.0 - (crf_windows[i+1].genetic_pos - crf_windows[i].genetic_pos),
-    //		      rfmix_opts.n_generations-1)/(n_subpops-1.);
-    //double change = 1.0 - stay;
+    if (gd < MIN_GD) gd = MIN_GD;
+    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
+    long double stay = pow(1.0 - change,1./rfmix_opts.crf_weight);
+    change = 1.0 - stay;
     for(j=0; j < n_subpops; j++) {
       beta[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
