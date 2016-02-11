@@ -68,7 +68,6 @@ void Subpop::set_ordering(void) {
   for(i=0; i < n_subpops; i++) {
     Subpop *s = lookup_subpop(subpop_names[i]);
     s->idx = i;
-    fprintf(stderr,"%s\t%d\n", subpop_names[i], s->idx);
   }
   
   
