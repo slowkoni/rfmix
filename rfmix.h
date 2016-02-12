@@ -122,6 +122,7 @@ typedef struct {
   int apriori_subpop; // 0 means query/admixed/unknown sample. 1 through K, reference sample
   int8_t *haplotype[2];
   int8_t *msp[4];
+  double logl[4];
   int16_t *current_p[2]; // current estimate of probability of subpop [hap][ IDX(crf_window,subpop) ]
   int16_t *est_p[4]; // new estimate of probability of subpop estimate [hap][ IDX(crf_window,subpop) ]
   float *sis_p[2]; // Suyash stay-in-state forward-backward probability [hap][ crf_window ]
@@ -151,7 +152,7 @@ enum { RF_BOOTSTRAP_FLAT=0, RF_BOOTSTRAP_HIERARCHICAL, RF_BOOTSTRAP_STRATIFIED, 
 #define P_MINIMUM_FOR_REF (0.8)
 #define RF_THREAD_WINDOW_CHUNK_SIZE (3)
 
-void crf(input_t *input);
+double crf(input_t *input);
 
 void msp_output(input_t *input);
 void fb_output(input_t *input);

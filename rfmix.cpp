@@ -16,6 +16,7 @@
 #include "random-forest.h"
 
 rfmix_opts_t rfmix_opts;
+int em_iteration;
 
 static option_t options[] = {
   /* Input and output specification options (all are required) */
@@ -188,11 +189,29 @@ int main(int argc, char *argv[]) {
   fprintf(stderr,"\n");
   input_t *rfmix_input = load_input();
 
+  em_iteration = 0;
   random_forest(rfmix_input);
-  crf(rfmix_input);
+  double logl = crf(rfmix_input);
   msp_output(rfmix_input);
   fb_output(rfmix_input);
   fb_stay_in_state_output(rfmix_input);
+  fprintf(stderr,"Initial analysis - logl %1.1f\n\n", logl);
+
+  for(int i=0; i < rfmix_opts.em_iterations; i++) {
+    em_iteration = i;
+    double last_logl = logl;
+    random_forest(rfmix_input);
+    logl = crf(rfmix_input);
+    double d = logl - last_logl;
+
+    msp_output(rfmix_input);
+    fb_output(rfmix_input);
+    fb_stay_in_state_output(rfmix_input);
+
+    fprintf(stderr,"EM iteration %d - logl %1.1f (%+1.1f)\n\n", i+1, logl, d);
+    if (i > 0 && d < 0.1) break;
+  }
+  
   
   free_input(rfmix_input);
   return 0;

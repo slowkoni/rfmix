@@ -111,7 +111,7 @@ static void fb_output_haplotype(FILE *f, int16_t *p, int n) {
 
 #define FB_EXTENSION ".fb.tsv"
 void fb_output(input_t *input) {
-  fprintf(stderr,"Outputting forward-backward results.... \n");
+  fprintf(stderr,"Outputing forward-backward results.... \n");
   int fname_length = strlen(rfmix_opts.output_basename) + strlen(FB_EXTENSION) + 1;
   char fname[fname_length];
 

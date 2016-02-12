@@ -16,6 +16,7 @@
 #include "mm.h"
 
 extern rfmix_opts_t rfmix_opts;
+extern int em_iteration;
 
 typedef struct {
   input_t *input;
@@ -614,16 +615,24 @@ static void setup_ref_haplotypes(window_t *w, input_t *input, int start_snp, int
       }
 
       // If this haplotype is suitable for use as reference, add it
-      if (p_tmp[max] > P_MINIMUM_FOR_REF) {
+      if (em_iteration > 0 || p_tmp[max] > P_MINIMUM_FOR_REF) {
 	rh[nrh].haplotype = (int *) ma->allocate(sizeof(int)*n_snps, WHEREFROM);
 	rh[nrh].current_p = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
 	
 	/* copy out the alleles */
 	for(int s = start_snp, t=0; s <= end_snp; s++, t++)
 	  rh[nrh].haplotype[t] = (int) samples[i].haplotype[h][s];
+
+	if (0) {
 	/* copy over the current_p that we already unpacked */
-	for(int k=0; k < n_subpops; k++)
-	  rh[nrh].current_p[k] = p_tmp[k];
+	  for(int k=0; k < n_subpops; k++)
+	    rh[nrh].current_p[k] = p_tmp[k];
+	} else {
+	  double d = 2. + em_iteration*em_iteration;
+	  for(int k=0; k < n_subpops; k++)
+	    rh[nrh].current_p[k] = (0.1/d)/n_subpops;
+	  rh[nrh].current_p[ samples[i].msp[h][window_idx] ] = 1. - (1/d)*(n_subpops - 1)/(double) n_subpops;
+	}
 	rh[nrh].max_idx = max;
 	
 	n_by_subpop[max]++;
@@ -661,7 +670,7 @@ static void *random_forest_thread(void *targ) {
   
   window.n_query_samples = 0;
   for(i=0; i < input->n_samples; i++) {
-    if (input->samples[i].apriori_subpop == -1)
+    if (rfmix_opts.em_iterations > 0 || input->samples[i].apriori_subpop == -1)
       window.n_query_samples++;
   }
 
@@ -707,7 +716,7 @@ static void *random_forest_thread(void *targ) {
 #endif
       int q = 0;
       for(i=0; i < input->n_samples; i++) {
-	if (input->samples[i].apriori_subpop == -1) {
+	if (rfmix_opts.em_iterations > 0 || input->samples[i].apriori_subpop == -1) {
 	  window.query_samples[q].sample_idx = i;
 	  setup_query_sample(window.query_samples + q, input->samples + i, n_subpops,
 			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);

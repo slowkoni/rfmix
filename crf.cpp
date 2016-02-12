@@ -86,13 +86,18 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
     d = nd;
     nd = swap_d;
   }
-
+  
   int8_t *msp = sample->msp[haplotype];
   max_state = 0;
   for(k=1; k < n_subpops; k++)
     if (d[k] > d[max_state]) max_state = k;
   double logl = d[max_state];
 
+  /* Do not accept the viterbi results if the log likelihood is worse than last
+     time. The maximum state path is left as it already is and the previous log
+     likelihood returned */
+  if (logl < sample->logl[haplotype]) return sample->logl[haplotype];
+  
   i = n_windows - 1;
   msp[i] = max_state;
   while(i > 0) {
@@ -101,6 +106,7 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
     i--;
   }
 
+  sample->logl[haplotype] = logl;
   return logl;
 }
 
@@ -253,7 +259,7 @@ static void *crf_thread(void *targ) {
     pthread_mutex_unlock(&args->lock);
 
     for(int i=start_sample; i < end_sample; i++) {
-      if (input->samples[i].apriori_subpop != -1) continue;
+      if (rfmix_opts.em_iterations == 0 && input->samples[i].apriori_subpop != -1) continue;
       for(int h=0; h < 4; h++) {
 	logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
 		       input->n_subpops, input->snps, ma);
@@ -295,7 +301,7 @@ static void __attribute__((unused))dump_results(input_t *input) {
   }
 }
 
-void crf(input_t *input) {
+double crf(input_t *input) {
   thread_args_t args;
   pthread_t threads[rfmix_opts.n_threads];
 
@@ -316,6 +322,8 @@ void crf(input_t *input) {
 #if 0
   dump_results(input);
 #endif
+
+  return args.viterbi_logl;
 }
 
   
