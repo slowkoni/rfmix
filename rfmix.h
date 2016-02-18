@@ -64,6 +64,7 @@ typedef struct {
   double rf_window_size;
   double crf_spacing;
   int n_trees;
+  int node_size;
   int reanalyze_reference;
   int em_iterations;
   int bootstrap_mode;
@@ -157,5 +158,6 @@ double crf(input_t *input);
 void msp_output(input_t *input);
 void fb_output(input_t *input);
 void fb_stay_in_state_output(input_t *input);
-
+void output_Q(input_t *input);
+  
 #endif
