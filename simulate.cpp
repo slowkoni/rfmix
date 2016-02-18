@@ -18,6 +18,7 @@ typedef struct {
   char *output_basename;
   char *chromosome;
   int n_generations;
+  double growth_rate;
   char *random_seed_str;
   int32_t random_seed;
 } opts_t;
@@ -33,7 +34,9 @@ static option_t options[] = {
     "Genetic map file (required)" },
   { 'o', "output-basename", &opts.output_basename, OPT_STR, 1, 1,
     "Basename (prefix) for output files (required)" },
-
+  { 0, "growth-rate", &opts.growth_rate, OPT_DBL, 0, 1,
+    "Growth rate of population per generation (1 = no growth, 1.5 = 50% increase per generation, etc.)" },
+  
   { 'c', "chromosome", &opts.chromosome, OPT_STR, 1, 1,
     "Chromosome to select from the VCF file" },
   { 'G', "generations", &opts.n_generations, OPT_INT, 0, 1,
@@ -51,7 +54,8 @@ static void init_options(void) {
   opts.sample_map_fname = NULL;
   opts.genetic_fname = NULL;
   opts.output_basename = NULL;
-
+  opts.growth_rate = 1.0;
+  
   opts.chromosome = NULL;
   opts.n_generations = 8;
   opts.random_seed_str = (char *) "0xDEADBEEF";
@@ -173,20 +177,23 @@ int main(int argc, char *argv[]) {
       parents[n_samples++] = new Sample(vcf->samples[i].sample_id, s->idx, vcf->snps, vcf->n_snps,
 					vcf->samples[i].haplotypes[0], vcf->samples[i].haplotypes[1]);
   }
-    
+
+  int last_size = n_samples;
   for(int g=0; g < opts.n_generations; g++) {
-    Sample **children = new Sample*[n_samples];
-    for(int i=0; i < n_samples; i++) {
-      int p1_idx = rand()/(RAND_MAX + 1.0) * n_samples;
-      int p2_idx = rand()/(RAND_MAX + 1.0) * n_samples;
+    int next_size = last_size * opts.growth_rate;
+    Sample **children = new Sample*[next_size];
+    for(int i=0; i < next_size; i++) {
+      int p1_idx = rand()/(RAND_MAX + 1.0) * last_size;
+      int p2_idx = rand()/(RAND_MAX + 1.0) * last_size;
       
       children[i] = new Sample(parents[p1_idx], parents[p2_idx]);
     }
 
-    for(int i=0; i < n_samples; i++)
+    for(int i=0; i < last_size; i++)
       delete parents[i];
     delete[] parents;
 
+    last_size = next_size;
     parents = children;
   }
 
@@ -212,7 +219,7 @@ int main(int argc, char *argv[]) {
   fprintf(vf,"##contig=<ID=%s>\n", opts.chromosome);
   fprintf(vf,"#CHROM\tPOS\tID\tREF\tVAR\tQUAL\tFILTER\tINFO\tFORMAT");
   fprintf(rf,"chm\tpos");
-  for(int j=0; j < n_samples; j++) {
+  for(int j=0; j < last_size; j++) {
     fprintf(vf,"\t%s", parents[j]->sample_id);
     fprintf(rf,"\t%s.0\t%s.1", parents[j]->sample_id, parents[j]->sample_id);
   }
@@ -224,7 +231,7 @@ int main(int argc, char *argv[]) {
 	    vcf->snps[i].snp_id, vcf->snps[i].ref, vcf->snps[i].alt);
     fprintf(rf,"%s\t%d", opts.chromosome, vcf->snps[i].pos);
     
-    for(int j=0; j < n_samples; j++) {
+    for(int j=0; j < last_size; j++) {
       fprintf(vf,"\t%d|%d", parents[j]->haplotype[0][i], parents[j]->haplotype[1][i]);
       fprintf(rf,"\t%d\t%d", parents[j]->subpop[0][i] + 1, parents[j]->subpop[1][i] + 1);
     }
