@@ -289,7 +289,8 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
 
 #define NODE_SIZE (2.0)
     double split_information = evaluate_snp(child_si, child_n, tree, snp, ref_q, n_ref, ma);
-    if (split_information < best_split && child_n[0] > NODE_SIZE && child_n[1] > NODE_SIZE) {
+    if (split_information < best_split &&
+	child_n[0] > rfmix_opts.node_size && child_n[1] > rfmix_opts.node_size) {
       //#define DEBUG_L2
 #ifdef DEBUG_L2
       fprintf(stderr,"level %d - try %3d/%3d/%3d  split %6.3f in %6.3f,%6.3f  parent %6.3f  %6.3f\n", level,
@@ -299,7 +300,7 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
       best_si[0] = child_si[0];
       best_si[1] = child_si[1];
       best_split = split_information;      
-    } else if (child_n[0] <= NODE_SIZE || child_n[1] <= NODE_SIZE) {
+    } else if (child_n[0] <= rfmix_opts.node_size || child_n[1] <= rfmix_opts.node_size) {
       snp_q[i] = snp_q[n_snps-1];
       snp_q[n_snps-1] = snp;
       n_snps--;

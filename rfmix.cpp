@@ -42,6 +42,8 @@ static option_t options[] = {
     "Average number of generations since expected admixture" },
   { 't', "trees", &rfmix_opts.n_trees, OPT_INT, 0, 1,
     "Number of tree in random forest to estimate population class probability" },
+  { 'n', "node-size", &rfmix_opts.node_size, OPT_INT, 0, 1,
+    "Terminal node size for random forest trees" },
   { 'e', "em-iterations", &rfmix_opts.em_iterations, OPT_INT, 0, 1,
     "Maximum number of EM iterations" },
   {   0, "reanalyze-reference", &rfmix_opts.reanalyze_reference, OPT_FLAG, 0, 0,
@@ -79,6 +81,7 @@ static void init_options(void) {
   rfmix_opts.crf_spacing = 0.1;
   rfmix_opts.n_generations = 8;
   rfmix_opts.n_trees = 100;
+  rfmix_opts.node_size = 2;
   rfmix_opts.bootstrap_mode = 1;
   rfmix_opts.em_iterations = 0;
   rfmix_opts.minimum_snps = 10;
@@ -138,6 +141,10 @@ static void verify_options(void) {
     fprintf(stderr,"\nNumber of random forest trees must be at least 10");
     stop = 1;
   }
+  if (rfmix_opts.node_size < 2) {
+    fprintf(stderr,"\nRandom forest node size must be at least 2");
+    stop = 1;
+  }
   if (rfmix_opts.bootstrap_mode < 0 || rfmix_opts.bootstrap_mode >= N_RF_BOOTSTRAP) {
     fprintf(stderr,"\nBootstrap mode (-b) out of valid range - see manual");
     stop = 1;
@@ -189,12 +196,14 @@ int main(int argc, char *argv[]) {
   fprintf(stderr,"\n");
   input_t *rfmix_input = load_input();
 
+  fprintf(stderr,"\n");
   em_iteration = 0;
   random_forest(rfmix_input);
   double logl = crf(rfmix_input);
   msp_output(rfmix_input);
   fb_output(rfmix_input);
   fb_stay_in_state_output(rfmix_input);
+  output_Q(rfmix_input);
   fprintf(stderr,"Initial analysis - logl %1.1f\n\n", logl);
 
   for(int i=0; i < rfmix_opts.em_iterations; i++) {
@@ -207,7 +216,8 @@ int main(int argc, char *argv[]) {
     msp_output(rfmix_input);
     fb_output(rfmix_input);
     fb_stay_in_state_output(rfmix_input);
-
+    output_Q(rfmix_input);
+    
     fprintf(stderr,"EM iteration %d - logl %1.1f (%+1.1f)\n\n", i+1, logl, d);
     if (i > 0 && d < 0.1) break;
   }
