@@ -15,6 +15,33 @@
 #include "mm.h"
 
 extern rfmix_opts_t rfmix_opts;
+extern int em_iteration;
+
+static void normalize_vector(double *p, int n) {
+  double sum_p = 0.;
+
+  for(int k=0; k < n; k++) {
+    if (p[k] < 0.) p[k] = 0.;
+    sum_p += p[k];
+  }
+  for(int k=0; k < n; k++)
+    p[k] /= sum_p;
+}
+
+static void lnormalize_vector(double *p, int n) {
+  double d = p[0];
+  for(int i=1; i < n; i++)
+    if (p[i] > d) d = p[i];
+
+  double pd_sum = 0.;
+  for(int i=0; i < n; i++) {
+    p[i] = exp(p[i] - d);
+    pd_sum += p[i];
+  }
+  
+  for(int i=0; i < n; i++)
+    p[i] = p[i]/pd_sum;  
+}
 
 #define SAMPLES_PER_BLOCK (8)
 typedef struct {
@@ -47,8 +74,20 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
      ancestry proportions and use that for the initial probability vector. For now
      set to equal probability. */
   double initial_p[n_subpops];
-  for(k=0; k < n_subpops; k++) initial_p[k] = log(1./(double) n_subpops);
-
+  if (em_iteration > 1) {
+    for(k=0; k < n_subpops; k++)
+      initial_p[k] = 1.;
+    for(i=0; i < n_windows; i++)
+      initial_p[sample->msp[haplotype][i]]++;
+    normalize_vector(initial_p, n_subpops);
+    for(k=0; k < n_subpops; k++)
+      initial_p[k] = log(initial_p[k]);
+  } else {
+    for(k=0; k < n_subpops; k++) {
+      initial_p[k] = log(1./(double) n_subpops);
+    }
+  }
+  
   int *phi = (int *) ma->allocate(sizeof(int)*n_subpops*n_windows, WHEREFROM);
   double *d = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
   double *nd = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
@@ -96,7 +135,7 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
   /* Do not accept the viterbi results if the log likelihood is worse than last
      time. The maximum state path is left as it already is and the previous log
      likelihood returned */
-  if (logl < sample->logl[haplotype]) return sample->logl[haplotype];
+  if (em_iteration > 0 && logl < sample->logl[haplotype]) return sample->logl[haplotype];
   
   i = n_windows - 1;
   msp[i] = max_state;
@@ -108,32 +147,6 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
 
   sample->logl[haplotype] = logl;
   return logl;
-}
-
-static void normalize_vector(double *p, int n) {
-  double sum_p = 0.;
-
-  for(int k=0; k < n; k++) {
-    if (p[k] < 0.) p[k] = 0.;
-    sum_p += p[k];
-  }
-  for(int k=0; k < n; k++)
-    p[k] /= sum_p;
-}
-
-static void lnormalize_vector(double *p, int n) {
-  double d = p[0];
-  for(int i=1; i < n; i++)
-    if (p[i] > d) d = p[i];
-
-  double pd_sum = 0.;
-  for(int i=0; i < n; i++) {
-    p[i] = exp(p[i] - d);
-    pd_sum += p[i];
-  }
-  
-  for(int i=0; i < n; i++)
-    p[i] = p[i]/pd_sum;  
 }
 
 static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_windows,
@@ -150,7 +163,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   for(i=1; i < n_windows; i++) {
     double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
     if (gd < MIN_GD) gd = MIN_GD;
-    long double stay = exp(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
+    long double stay = expl(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
     long double change = (1.0 - stay)/(n_subpops-1.);
     //    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
     //    long double stay = powl(1.0 - change,1./rfmix_opts.crf_weight);
@@ -178,7 +191,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   for(i=n_windows-2; i >=0 ; i--) {
     double gd = crf_windows[i+1].genetic_pos - crf_windows[i].genetic_pos;
     if (gd < MIN_GD) gd = MIN_GD;
-    long double stay = exp(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
+    long double stay = expl(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
     long double change = (1.0 - stay)/(n_subpops-1.);
     //    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
     //    long double stay = powl(1.0 - change,1./rfmix_opts.crf_weight);

@@ -31,6 +31,7 @@ typedef struct {
   int sample_idx;
   int *haplotype[4];
   double *est_p[4];
+  double *current_p[4];
 } wsample_t;
 
 typedef struct {
@@ -286,8 +287,9 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
   for(int i=0; i < n_try && i < n_snps; i++) {
     int snp = snp_q[i];
 
+#define NODE_SIZE (2.0)
     double split_information = evaluate_snp(child_si, child_n, tree, snp, ref_q, n_ref, ma);
-    if (split_information < best_split && child_n[0] >= 1. && child_n[1] >= 1.) {
+    if (split_information < best_split && child_n[0] > NODE_SIZE && child_n[1] > NODE_SIZE) {
       //#define DEBUG_L2
 #ifdef DEBUG_L2
       fprintf(stderr,"level %d - try %3d/%3d/%3d  split %6.3f in %6.3f,%6.3f  parent %6.3f  %6.3f\n", level,
@@ -297,7 +299,7 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
       best_si[0] = child_si[0];
       best_si[1] = child_si[1];
       best_split = split_information;      
-    } else if (child_n[0] < 1. || child_n[1] < 1.) {
+    } else if (child_n[0] <= NODE_SIZE || child_n[1] <= NODE_SIZE) {
       snp_q[i] = snp_q[n_snps-1];
       snp_q[n_snps-1] = snp;
       n_snps--;
@@ -325,7 +327,7 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
       fprintf(stderr,", %4.1f",node->p[k]);
     fprintf(stderr," ]\n");
 #endif
-    normalize_vector(node->p, tree->n_subpops);
+    //    normalize_vector(node->p, tree->n_subpops);
     
     node->left = NULL;
     node->right = NULL;
@@ -404,6 +406,8 @@ static void hierarchical_bootstrap(tree_t *tree, window_t *window) {
   for(i=0; i < window->n_ref_haplotypes; i++) {
     int k = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx++, 0, window->n_subpops);
     int n = window->n_ref_haplotypes_by_subpop[k];
+    if (n == 0) { i--; continue; }
+    
     int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx++, 0, n);
     int h = window->ref_haplotype_list[k][j];
 
@@ -419,10 +423,11 @@ static void stratified_bootstrap(tree_t *tree, window_t *window) {
   for(int k=0; k < window->n_subpops; k++) {
     int n = window->n_ref_haplotypes_by_subpop[k];
     for(int i=0; i < n; i++) {
-      int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx, 0, n);
-
-      tree->haplotypes[h] = window->ref_haplotypes[j].haplotype;
-      tree->current_p[h] = window->ref_haplotypes[j].current_p;
+      int j = tree->rng->uniform_int(RFOREST_RNG_KEY, window->idx, window->rng_idx++, 0, n);
+      int t = window->ref_haplotype_list[k][j];
+      
+      tree->haplotypes[h] = window->ref_haplotypes[t].haplotype;
+      tree->current_p[h] = window->ref_haplotypes[t].current_p;
       h++;
     }
   }
@@ -539,7 +544,13 @@ static void evaluate_sample(wsample_t *wsample, window_t *window, tree_t **trees
       int d = 0;
       evaluate_tree(p, &d, wsample->haplotype[h], trees[t]->root, window->n_subpops);
       
-      for(int k=0; k < window->n_subpops; k++) wsample->est_p[h][k] += p[k]/(double) d;
+      for(int k=0; k < window->n_subpops; k++) {
+	if (p[k] > wsample->current_p[h][k]) {
+	  wsample->est_p[h][k] += (p[k] - wsample->current_p[h][k])/(double) d;
+	} else {
+	  wsample->est_p[h][k] += p[k]/(double) d;
+	}
+      }
     }
 
     /* Normalize to probabilities that sum to one across all subpops. */
@@ -563,7 +574,7 @@ static void setup_query_sample(wsample_t *wsample, sample_t *sample, int n_subpo
 
   for(k=0; k < 4; k++)
     wsample->haplotype[k] = (int *) ma->allocate(sizeof(int)*(snp_end - snp_start + 1), WHEREFROM);
-  
+    
   /* Haplotypes 0 and 1 in wsample are phased as given in input->sample[i] */
   for(k=0; k < 2; k++) {
     for(s=snp_start,t=0; s <= snp_end; s++,t++)
@@ -582,8 +593,11 @@ static void setup_query_sample(wsample_t *wsample, sample_t *sample, int n_subpo
   }
   
   for(int j=0; j < 4; j++) {
-    for(k=0; k < n_subpops; k++)
+    wsample->current_p[j] = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
+    for(k=0; k < n_subpops; k++) {
       wsample->est_p[j][k] = 0.0;
+      wsample->current_p[j][k] = DF16(sample->current_p[j & 0x1][k]);
+    }
   }
 }
 
@@ -615,7 +629,7 @@ static void setup_ref_haplotypes(window_t *w, input_t *input, int start_snp, int
       }
 
       // If this haplotype is suitable for use as reference, add it
-      if (em_iteration > 0 || p_tmp[max] > P_MINIMUM_FOR_REF) {
+      if ((samples[i].apriori_subpop != -1 || em_iteration > 0) && p_tmp[max] > P_MINIMUM_FOR_REF) {
 	rh[nrh].haplotype = (int *) ma->allocate(sizeof(int)*n_snps, WHEREFROM);
 	rh[nrh].current_p = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
 	
@@ -623,15 +637,15 @@ static void setup_ref_haplotypes(window_t *w, input_t *input, int start_snp, int
 	for(int s = start_snp, t=0; s <= end_snp; s++, t++)
 	  rh[nrh].haplotype[t] = (int) samples[i].haplotype[h][s];
 
-	if (0) {
+	if (em_iteration > 1) {
 	/* copy over the current_p that we already unpacked */
 	  for(int k=0; k < n_subpops; k++)
 	    rh[nrh].current_p[k] = p_tmp[k];
 	} else {
-	  double d = 2. + em_iteration*em_iteration;
+	  double d = 0.1/(2. + em_iteration);
 	  for(int k=0; k < n_subpops; k++)
-	    rh[nrh].current_p[k] = (0.1/d)/n_subpops;
-	  rh[nrh].current_p[ samples[i].msp[h][window_idx] ] = 1. - (1/d)*(n_subpops - 1)/(double) n_subpops;
+	    rh[nrh].current_p[k] = d/(n_subpops-1);
+	  rh[nrh].current_p[ samples[i].msp[h][window_idx] ] = 1. - d;
 	}
 	rh[nrh].max_idx = max;
 	
