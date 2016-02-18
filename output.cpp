@@ -179,3 +179,44 @@ void fb_stay_in_state_output(input_t *input) {
     fprintf(f,"\n");
   }
 }
+
+#define Q_EXTENSION (".rfmix.Q")
+void output_Q(input_t *input) {
+  fprintf(stderr,"Outputing .Q.... \n");
+  int fname_length = strlen(rfmix_opts.output_basename) + strlen(Q_EXTENSION) + 1;
+  char fname[fname_length];
+
+  sprintf(fname,"%s%s", rfmix_opts.output_basename, Q_EXTENSION);
+  FILE *f = fopen(fname, "w");
+  if (f == NULL) {
+    fprintf(stderr,"Can't open output file %s (%s)\n", fname, strerror(errno));
+    exit(-1);
+  }
+
+  fprintf(f,"#rfmix diploid global ancestry .Q format output\n");
+  fprintf(f,"#sample");
+  for(int i=0; i < input->n_subpops; i++) {
+    fprintf(f,"\t%s", input->reference_subpops[i]);
+  }
+  fprintf(f,"\n");
+
+  double q[input->n_subpops];
+  for(int i=0; i < input->n_samples; i++) {
+    sample_t *sample = input->samples + i;
+    if (sample->apriori_subpop != -1 && rfmix_opts.em_iterations == 0) continue;
+    
+    for(int k=0; k < input->n_subpops; k++) q[k] = 0.;
+    for(int j=0; j < input->n_windows; j++) {
+      q[sample->msp[0][j]]++;
+      q[sample->msp[1][j]]++;
+    }
+    for(int k=0; k < input->n_subpops; k++)
+      q[k] = q[k]/(input->n_windows*2);
+    fprintf(f,"%s", sample->sample_id);
+    for(int k=0; k < input->n_subpops; k++)
+      fprintf(f,"\t%1.5f", q[k]);
+    fprintf(f,"\n");
+  }
+
+  fclose(f);
+}
