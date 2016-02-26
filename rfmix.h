@@ -36,6 +36,9 @@ static inline int8_t ef8(double p) {
 #define EF16(p) ( (int) ( -1024*log( (1.0-(p))/(p) ) ) )
 
 static inline int16_t ef16(double p) {
+  if (p <= 0.) return -32767;
+  if (p >= 1.) return +32767;
+  
   int tmp = (int) ( -1024.0 * log( (1.0 - p)/p ) );
   if (tmp < -32767) tmp = -32767;
   if (tmp >  32767) tmp =  32767;
@@ -150,6 +153,7 @@ typedef struct {
 #define RFOREST_RNG_KEY 0x949FC1AD
 enum { RF_BOOTSTRAP_FLAT=0, RF_BOOTSTRAP_HIERARCHICAL, RF_BOOTSTRAP_STRATIFIED, N_RF_BOOTSTRAP };
 
+#define MINIMUM_GENETIC_DISTANCE (0.0001)
 #define P_MINIMUM_FOR_REF (0.0)
 #define RF_THREAD_WINDOW_CHUNK_SIZE (3)
 

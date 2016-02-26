@@ -53,7 +53,16 @@ typedef struct {
   pthread_mutex_t lock;
 } thread_args_t;
 
-#define MIN_GD (0.0001)
+static void compute_state_change(long double *r_stay, long double *r_change, double d, int g, double w) {
+  if (d < MINIMUM_GENETIC_DISTANCE) d = MINIMUM_GENETIC_DISTANCE;
+  long double r = 1.0 - expl(d*(g-1));
+  long double nr = 1.0 - r;
+  r = powl(r, w);
+
+  *r_stay = nr;
+  *r_change = r;
+}
+
 static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows,
 		      int n_windows, int n_subpops, snp_t *snps, mm *ma) {
   int i, j, k;
@@ -99,18 +108,27 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
     d[k] = initial_p[k] + p[ IDX(0,k) ];
 
   for(i=1; i < n_windows; i++) {
-    double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
-    if (gd < MIN_GD) gd = MIN_GD;
-    double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops-1);
-    double log_rcb = log(rcb) * rfmix_opts.crf_weight;
-    double log_nrcb = log(1.0 - rcb);
-      
+    long double stay, change;
+    
+    compute_state_change(&stay, &change,
+			 crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos,
+			 rfmix_opts.n_generations, rfmix_opts.crf_weight);
+    double log_stay = (double) logl(stay);
+    double log_change = (double) logl(change);
+    
+    //double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops-1);
+    //double log_rcb = log(rcb) * rfmix_opts.crf_weight;
+    //double log_nrcb = log(1.0 - rcb);
+    //double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)));
+    //double log_rcb = rfmix_opts.crf_weight * log(rcb);
+    //double log_nrcb = log(1.0 - rcb);
+    
     for(j=0; j < n_subpops; j++) {
       double p_obs = p[ IDX(i,j) ];
 
       max_state = -1; max_d = -DBL_MAX;
       for(k=0; k < n_subpops; k++) {
-	double tmp_d = d[k] + p_obs + ( (j==k) ? log_nrcb : log_rcb );
+	double tmp_d = d[k] + p_obs + ( (j==k) ? log_stay : log_change );
 	if (tmp_d > max_d) {
 	  max_state = k;
 	  max_d = tmp_d;
@@ -149,10 +167,12 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
   return logl;
 }
 
+//#define DEBUG
 static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_windows,
 			     int n_windows, int n_subpops, mm *ma) {
   int i, j, k;
-
+  long double change, stay;
+  
   if (haplotype > 1) return;
 
   double *alpha = (double *) ma->allocate(sizeof(double)*n_subpops*n_windows, WHEREFROM);
@@ -162,19 +182,14 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
 
   for(i=1; i < n_windows; i++) {
     double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
-    if (gd < MIN_GD) gd = MIN_GD;
-    long double stay = expl(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
-    long double change = (1.0 - stay)/(n_subpops-1.);
-    //    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
-    //    long double stay = powl(1.0 - change,1./rfmix_opts.crf_weight);
-    //    change = 1.0 - stay;
+    compute_state_change(&stay, &change, gd, rfmix_opts.n_generations, rfmix_opts.crf_weight);
     for(j=0; j < n_subpops; j++) {
       alpha[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
 	alpha[ IDX(i,j) ] += alpha[ IDX(i-1,k) ]*( (j==k) ? stay : change );
-      alpha[ IDX(i,j) ] = logl(alpha[ IDX(i,j) ]) + logl(DF16(sample->est_p[haplotype][ IDX(i,j) ]));
+      alpha[ IDX(i,j) ] = alpha[ IDX(i,j) ]*DF16(sample->est_p[haplotype][ IDX(i,j) ]);
     }
-    lnormalize_vector(alpha + i*n_subpops, n_subpops);
+    normalize_vector(alpha + i*n_subpops, n_subpops);
 #ifdef DEBUG
     fprintf(stderr,"sample %s  haplotype %d   window %5d", sample->sample_id, haplotype, i);
     for(k=0; k < n_subpops; k++)
@@ -190,9 +205,9 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   
   for(i=n_windows-2; i >=0 ; i--) {
     double gd = crf_windows[i+1].genetic_pos - crf_windows[i].genetic_pos;
-    if (gd < MIN_GD) gd = MIN_GD;
-    long double stay = expl(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
-    long double change = (1.0 - stay)/(n_subpops-1.);
+    compute_state_change(&stay, &change, gd, rfmix_opts.n_generations, rfmix_opts.crf_weight);
+    //    long double stay = expl(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
+    //    long double change = (1.0 - stay)/(n_subpops-1.);
     //    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
     //    long double stay = powl(1.0 - change,1./rfmix_opts.crf_weight);
     //    change = 1.0 - stay;
@@ -201,9 +216,9 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
       for(k=0; k < n_subpops; k++) {
 	beta[ IDX(i,j) ] +=  expl(logl(beta[ IDX(i+1,k) ]) + logl(DF16(sample->est_p[haplotype][ IDX(i+1,k) ]))  + logl(( (j==k) ? stay : change )));
       }
-      beta[ IDX(i,j) ] = log(beta[ IDX(i,j) ]);
+      beta[ IDX(i,j) ] = beta[ IDX(i,j) ];
     }
-    lnormalize_vector(beta + i*n_subpops, n_subpops);
+    normalize_vector(beta + i*n_subpops, n_subpops);
 #ifdef DEBUG
     fprintf(stderr,"sample %s  haplotype %d   window %5d pos %8.5f", sample->sample_id, haplotype, i,
 	    crf_windows[i].genetic_pos*100.);
@@ -217,12 +232,13 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
     double sum_p = 0.;
     double p[n_subpops];
     for(k=0; k < n_subpops; k++) {
-      p[k] = log(alpha[ IDX(i,k) ]) + log(beta[ IDX(i,k) ]);
+      p[k] = alpha[ IDX(i,k) ]*beta[ IDX(i,k) ];
       //      p[k] = alpha[ IDX(i,k) ] * beta[ IDX(i,k) ];
       //      if (p[k] < 0.) p[k] = 0.;
       //      sum_p += p[k];
     }
-    lnormalize_vector(p, n_subpops);
+    normalize_vector(p, n_subpops);
+
     for(k=0; k < n_subpops; k++) {
       //      p[k] /= sum_p;
       sample->current_p[haplotype][ IDX(i,k) ] = ef16(p[k]);
@@ -272,7 +288,7 @@ static void *crf_thread(void *targ) {
     pthread_mutex_unlock(&args->lock);
 
     for(int i=start_sample; i < end_sample; i++) {
-      if (rfmix_opts.em_iterations == 0 && input->samples[i].apriori_subpop != -1) continue;
+      if (/*rfmix_opts.em_iterations == 0 && */input->samples[i].apriori_subpop != -1) continue;
       for(int h=0; h < 4; h++) {
 	logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
 		       input->n_subpops, input->snps, ma);

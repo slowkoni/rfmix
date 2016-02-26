@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
   fprintf(stderr,"Initial analysis - logl %1.1f\n\n", logl);
 
   for(int i=0; i < rfmix_opts.em_iterations; i++) {
-    em_iteration = i;
+    em_iteration = i + 1;
     double last_logl = logl;
     random_forest(rfmix_input);
     logl = crf(rfmix_input);

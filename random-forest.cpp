@@ -685,7 +685,7 @@ static void *random_forest_thread(void *targ) {
   
   window.n_query_samples = 0;
   for(i=0; i < input->n_samples; i++) {
-    if (rfmix_opts.em_iterations > 0 || input->samples[i].apriori_subpop == -1)
+    if (rfmix_opts.em_iterations > 10 || input->samples[i].apriori_subpop == -1)
       window.n_query_samples++;
   }
 
@@ -731,7 +731,7 @@ static void *random_forest_thread(void *targ) {
 #endif
       int q = 0;
       for(i=0; i < input->n_samples; i++) {
-	if (rfmix_opts.em_iterations > 0 || input->samples[i].apriori_subpop == -1) {
+	if (rfmix_opts.em_iterations > 10 || input->samples[i].apriori_subpop == -1) {
 	  window.query_samples[q].sample_idx = i;
 	  setup_query_sample(window.query_samples + q, input->samples + i, n_subpops,
 			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
