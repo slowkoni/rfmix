@@ -53,11 +53,11 @@ typedef struct {
   pthread_mutex_t lock;
 } thread_args_t;
 
-static void compute_state_change(long double *r_stay, long double *r_change, double d, int g, double w) {
+static void compute_state_change(double *r_stay, double *r_change, double d, int g, double w) {
   if (d < MINIMUM_GENETIC_DISTANCE) d = MINIMUM_GENETIC_DISTANCE;
-  long double r = 1.0 - expl(d*(g-1));
-  long double nr = 1.0 - r;
-  r = powl(r, w);
+  double r = 1.0 - exp(d*(g-1));
+  double nr = 1.0 - r;
+  r = pow(r, w);
 
   *r_stay = nr;
   *r_change = r;
@@ -108,20 +108,13 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
     d[k] = initial_p[k] + p[ IDX(0,k) ];
 
   for(i=1; i < n_windows; i++) {
-    long double stay, change;
+    double stay, change;
     
     compute_state_change(&stay, &change,
 			 crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos,
 			 rfmix_opts.n_generations, rfmix_opts.crf_weight);
-    double log_stay = (double) logl(stay);
-    double log_change = (double) logl(change);
-    
-    //double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)))/(n_subpops-1);
-    //double log_rcb = log(rcb) * rfmix_opts.crf_weight;
-    //double log_nrcb = log(1.0 - rcb);
-    //double rcb = (1.0 - exp(-gd*(rfmix_opts.n_generations-1)));
-    //double log_rcb = rfmix_opts.crf_weight * log(rcb);
-    //double log_nrcb = log(1.0 - rcb);
+    double log_stay = (double) log(stay);
+    double log_change = (double) log(change);
     
     for(j=0; j < n_subpops; j++) {
       double p_obs = p[ IDX(i,j) ];
@@ -171,7 +164,7 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
 static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_windows,
 			     int n_windows, int n_subpops, mm *ma) {
   int i, j, k;
-  long double change, stay;
+  double change, stay;
   
   if (haplotype > 1) return;
 
@@ -206,15 +199,12 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   for(i=n_windows-2; i >=0 ; i--) {
     double gd = crf_windows[i+1].genetic_pos - crf_windows[i].genetic_pos;
     compute_state_change(&stay, &change, gd, rfmix_opts.n_generations, rfmix_opts.crf_weight);
-    //    long double stay = expl(-gd*(rfmix_opts.n_generations-1)/rfmix_opts.crf_weight);
-    //    long double change = (1.0 - stay)/(n_subpops-1.);
-    //    long double change =  (1.0 - expl(-gd*(rfmix_opts.n_generations-1)))/(n_subpops - 1.);
-    //    long double stay = powl(1.0 - change,1./rfmix_opts.crf_weight);
-    //    change = 1.0 - stay;
+
     for(j=0; j < n_subpops; j++) {
       beta[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++) {
-	beta[ IDX(i,j) ] +=  expl(logl(beta[ IDX(i+1,k) ]) + logl(DF16(sample->est_p[haplotype][ IDX(i+1,k) ]))  + logl(( (j==k) ? stay : change )));
+	beta[ IDX(i,j) ] +=  beta[ IDX(i+1,k) ] * DF16(sample->est_p[haplotype][ IDX(i+1,k) ]) *
+	  ( (j==k) ? stay : change );
       }
       beta[ IDX(i,j) ] = beta[ IDX(i,j) ];
     }
