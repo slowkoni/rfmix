@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <time.h>
 
+/* Local includes */
 #include "cmdline-utils.h"
 #include "kmacros.h"
 
@@ -21,54 +22,55 @@ int em_iteration;
 static option_t options[] = {
   /* Input and output specification options (all are required) */
   { 'f', "query-file", &rfmix_opts.qvcf_fname, OPT_STR, 1, 1,
-    "VCF file with samples to analyze (required)" },
+    "VCF file with samples to analyze                      (required)" },
   { 'r', "reference-file", &rfmix_opts.rvcf_fname, OPT_STR, 1, 1,
-    "VCF file with reference individuals (required)" },
+    "VCF file with reference individuals                   (required)" },
   { 'm', "sample-map", &rfmix_opts.class_fname, OPT_STR, 1, 1,
-    "Reference panel sample population classification map (required)" },
+    "Reference panel sample population classification map  (required)" },
   { 'g', "genetic-map", &rfmix_opts.genetic_fname, OPT_STR, 1, 1,
-    "Genetic map file (required)" },
+    "Genetic map file                                      (required)" },
   { 'o', "output-basename", &rfmix_opts.output_basename, OPT_STR, 1, 1,
-    "Basename (prefix) for output files (required)" },
+    "Basename (prefix) for output files                    (required)" },
+  { 0, "chromosome", &rfmix_opts.chromosome, OPT_STR, 1, 1,
+    "Execute only on specified chromosome                  (required)\n" },
 
   /* Tunable algorithm parameters (none are required - defaults are reasonable)*/
-  {   0, "max-missing", &rfmix_opts.maximum_missing_data_freq, OPT_DBL, 0, 1,
-      "Maximum proportion of missing data allowed to include a SNP" },
-  { 'w', "rf-window-size", &rfmix_opts.rf_window_size, OPT_DBL, 0, 1,
-    "Random forest window size (class estimation window size)" },
   { 'c', "crf-spacing", &rfmix_opts.crf_spacing, OPT_DBL, 0, 1,
     "Conditional Random Field spacing (# of SNPs)" },
+  { 's', "rf-window-size", &rfmix_opts.rf_window_size, OPT_DBL, 0, 1,
+    "Random forest window size (class estimation window size)" },
+  { 'w', "crf-weight", &rfmix_opts.crf_weight, OPT_DBL, 0, 1,
+    "Weight of observation term relative to transition term in conditional random field" },
   { 'G', "generations", &rfmix_opts.n_generations, OPT_DBL, 0, 1,
     "Average number of generations since expected admixture" },
-  { 't', "trees", &rfmix_opts.n_trees, OPT_INT, 0, 1,
-    "Number of tree in random forest to estimate population class probability" },
-  { 'n', "node-size", &rfmix_opts.node_size, OPT_INT, 0, 1,
-    "Terminal node size for random forest trees" },
   { 'e', "em-iterations", &rfmix_opts.em_iterations, OPT_INT, 0, 1,
     "Maximum number of EM iterations" },
-  {   0, "reanalyze-reference", &rfmix_opts.reanalyze_reference, OPT_FLAG, 0, 0,
-      "After first iteration, include reference panel in analysis and reclassify" },
+  {  0, "reanalyze-reference", &rfmix_opts.reanalyze_reference, OPT_FLAG, 0, 0,
+     "In EM, analyze local ancestry of the reference panel and reclassify it\n" },
+
+  { 'n', "node-size", &rfmix_opts.node_size, OPT_INT, 0, 1,
+    "Terminal node size for random forest trees" },
+  { 't', "trees", &rfmix_opts.n_trees, OPT_INT, 0, 1,
+    "Number of tree in random forest to estimate population class probability" },
+  {  0, "max-missing", &rfmix_opts.maximum_missing_data_freq, OPT_DBL, 0, 1,
+      "Maximum proportion of missing data allowed to include a SNP" },
   { 'b', "bootstrap-mode", &rfmix_opts.bootstrap_mode, OPT_INT, 0, 1,
     "Specify random forest bootstrap mode as integer code (see manual)" },
   { 0, "rf-minimum-snps", &rfmix_opts.minimum_snps, OPT_INT, 0, 1,
     "With genetic sized rf windows, include at least this many SNPs regardless of span" },
   { 0, "analyze-range", &rfmix_opts.analyze_str, OPT_STR, 0, 1,
-    "Physical position range, specified as <start pos>-<end pos>, in Mbp (decimal allowed)" },
-  { 0, "crf-weight", &rfmix_opts.crf_weight, OPT_DBL, 0, 1,
-    "Weight of observation term relative to transition term in conditional random field" },
+    "Physical position range, specified as <start pos>-<end pos>, in Mbp (decimal allowed)\n" },
   
   /* Runtime execution control options (only specifies how the program runs)*/
   { 0, "n-threads", &rfmix_opts.n_threads, OPT_INT, 0, 1,
     "Force number of simultaneous thread for parallel execution" },
-  { 0, "chromosome", &rfmix_opts.chromosome, OPT_STR, 1, 1,
-    "Execute only on specified chromosome (currently required)" },
   { 0, "random-seed", &rfmix_opts.random_seed_str, OPT_STR, 0, 1,
-    "Seed value for random number generation - integer value (maybe specified in"
-    "hexadecimal by preceeding with 0x), or the string \"clock\" to seed with "
-    "the current system time." },
+    "Seed value for random number generation (integer)\n"
+    "\t(maybe specified in hexadecimal by preceeding with 0x), or the string \"clock\" \n"
+    "\tto seed with the current system time." },
   { 0, NULL, NULL, 0, 0, 0, NULL }
 };
- 
+
 static void init_options(void) {
   rfmix_opts.qvcf_fname = (char *) "";
   rfmix_opts.rvcf_fname = (char *) "";
@@ -77,8 +79,8 @@ static void init_options(void) {
   rfmix_opts.output_basename = (char *) "";
 
   rfmix_opts.maximum_missing_data_freq = 0.05;
-  rfmix_opts.rf_window_size = 0.2;
-  rfmix_opts.crf_spacing = 0.1;
+  rfmix_opts.rf_window_size = 50;
+  rfmix_opts.crf_spacing = 5;
   rfmix_opts.n_generations = 8;
   rfmix_opts.n_trees = 100;
   rfmix_opts.node_size = 2;
@@ -88,11 +90,30 @@ static void init_options(void) {
   rfmix_opts.analyze_str = (char *) "";
   rfmix_opts.analyze_range[0] = INT_MIN;
   rfmix_opts.analyze_range[1] = INT_MAX;
-  rfmix_opts.crf_weight = 1.0;
+  rfmix_opts.crf_weight = 25.0;
+  rfmix_opts.reanalyze_reference = 0;
   
   rfmix_opts.n_threads = sysconf(_SC_NPROCESSORS_CONF);
   rfmix_opts.chromosome = (char *) "";
   rfmix_opts.random_seed_str = (char *) "0xDEADBEEF";
+}
+
+static void print_banner(void) {
+  fprintf(stderr,
+"\n"
+"RFMIX %s - Local Ancestry and Admixture Inference\n"
+"(c) 2016 Mark Koni Hamilton Wright\n"
+"Bustamante Lab - Stanford University School of Medicine\n"
+"Based on concepts developed in RFMIX v1 by Brian Keith Maples, et al.\n"
+"\n"
+"This version is licensed for non-commercial academic research use only\n"
+"For commercial licensing, please contact cdbadmin@stanford.edu\n"
+"\n"
+"--- For use in scientific publications please cite original publication ---\n"
+"Brian Maples, Simon Gravel, Eimear E. Kenny, and Carlos D. Bustamante (2013).\n"
+"RFMix: A Discriminative Modeling Approach for Rapid and Robust Local-Ancestry\n"
+"Inference. Am. J. Hum. Genet. 93, 278-288\n"
+"\n", VERSION);
 }
 
 static void verify_options(void) {
@@ -131,7 +152,7 @@ static void verify_options(void) {
     fprintf(stderr,"\nConditional random field size must be larger than 0");
     stop = 1;
   }
-  if (rfmix_opts.n_generations < 0.) {
+  if (rfmix_opts.n_generations <= 0.) {
     // and it really only makes sense 2 or larger, but smaller values useful for testing
     // penalizing recombination
     fprintf(stderr,"\nNumber of generations since putative admixture must be larger than 0.");
@@ -189,6 +210,7 @@ static void verify_options(void) {
 
 int main(int argc, char *argv[]) {
 
+  print_banner();
   init_options();
   cmdline_getoptions(options, argc, argv);
   verify_options();

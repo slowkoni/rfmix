@@ -28,7 +28,7 @@ static void normalize_vector(double *p, int n) {
     p[k] /= sum_p;
 }
 
-static void lnormalize_vector(double *p, int n) {
+static void __attribute__((unused))lnormalize_vector(double *p, int n) {
   double d = p[0];
   for(int i=1; i < n; i++)
     if (p[i] > d) d = p[i];
@@ -55,7 +55,7 @@ typedef struct {
 
 static void compute_state_change(double *r_stay, double *r_change, double d, int g, double w) {
   if (d < MINIMUM_GENETIC_DISTANCE) d = MINIMUM_GENETIC_DISTANCE;
-  double r = 1.0 - exp(d*(g-1));
+  double r = 1.0 - exp(-d*(g-1));
   double nr = 1.0 - r;
   r = pow(r, w);
 
@@ -219,13 +219,9 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   }
 
   for(i=0; i < n_windows; i++) {
-    double sum_p = 0.;
     double p[n_subpops];
     for(k=0; k < n_subpops; k++) {
       p[k] = alpha[ IDX(i,k) ]*beta[ IDX(i,k) ];
-      //      p[k] = alpha[ IDX(i,k) ] * beta[ IDX(i,k) ];
-      //      if (p[k] < 0.) p[k] = 0.;
-      //      sum_p += p[k];
     }
     normalize_vector(p, n_subpops);
 
@@ -278,15 +274,18 @@ static void *crf_thread(void *targ) {
     pthread_mutex_unlock(&args->lock);
 
     for(int i=start_sample; i < end_sample; i++) {
-      if (/*rfmix_opts.em_iterations == 0 && */input->samples[i].apriori_subpop != -1) continue;
-      for(int h=0; h < 4; h++) {
-	logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
-		       input->n_subpops, input->snps, ma);
-	if (h < 2) total_logl += logl;
-	forward_backward(input->samples + i, h, input->crf_windows, input->n_windows,
-			 input->n_subpops, ma);
+      if ((rfmix_opts.em_iterations > 0 && rfmix_opts.reanalyze_reference) ||
+	  input->samples[i].apriori_subpop == -1) {
+	for(int h=0; h < 4; h++) {
+	  logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
+			 input->n_subpops, input->snps, ma);
+	  if (h < 2) total_logl += logl;
+	  forward_backward(input->samples + i, h, input->crf_windows, input->n_windows,
+			   input->n_subpops, ma);
+	}
       }
     }
+    ma->recycle();
 
     pthread_mutex_lock(&args->lock);
     args->samples_completed += end_sample - start_sample;
@@ -299,6 +298,7 @@ static void *crf_thread(void *targ) {
   args->viterbi_logl += total_logl;
   pthread_mutex_unlock(&args->lock);
 
+  delete ma;
   return NULL;
 }
 

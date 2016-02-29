@@ -1,6 +1,9 @@
 #ifndef RFMIX_H
 #define RFMIX_H
 
+/* From GNU autoconf/automake */
+#include "config.h"
+
 #include <vector>
 #include "genetic-map.h"
 #include "hash-table.h"
