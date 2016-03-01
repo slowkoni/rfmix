@@ -1,3 +1,15 @@
+/* RFMIX v2.XX - Local Ancestry and Admixture Analysis
+   Bustamante Lab - Stanford School of Medicine
+   (c) 2016 Mark Hamilton Wright
+
+   This program is licensed for academic research use only
+   unless otherwise stated. Contact cdbadmin@stanford.edu for
+   commercial licensing options.
+
+   Academic and research users should cite Brian Maples'
+   paper describing RFMIX in any publication using RFMIX
+   results. Citation is printed when the program is started. */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +30,7 @@ typedef struct {
   char *output_basename;
   char *chromosome;
   int n_generations;
+  int ril;
   double growth_rate;
   char *random_seed_str;
   int32_t random_seed;
@@ -41,7 +54,9 @@ static option_t options[] = {
     "Chromosome to select from the VCF file" },
   { 'G', "generations", &opts.n_generations, OPT_INT, 0, 1,
     "Number of generations to simulate random mating admixture" },
-
+  {  0 , "make-rils", &opts.ril, OPT_FLAG, 0, 0,
+     "After first generation of random mating, make recombinant inbred lines by selfing" },
+  
   { 0, "random-seed", &opts.random_seed_str, OPT_STR, 0, 1,
     "Seed value for random number generation - integer value (maybe specified in"
     "hexadecimal by preceeding with 0x), or the string \"clock\" to seed with "
@@ -58,6 +73,7 @@ static void init_options(void) {
   
   opts.chromosome = NULL;
   opts.n_generations = 8;
+  opts.ril = 0;
   opts.random_seed_str = (char *) "0xDEADBEEF";
 }
 
@@ -181,14 +197,33 @@ int main(int argc, char *argv[]) {
   int last_size = n_samples;
   for(int g=0; g < opts.n_generations; g++) {
     int next_size = last_size * opts.growth_rate;
+
+    int i;
+    int *s = new int[last_size];
+    for(i=0; i < last_size; i++)
+      s[i] = i;
+    
+    for(i=0; i < last_size; i++) {
+      int j = rand()/(RAND_MAX + 1.0) * last_size;
+      int tmp = s[i];
+      s[i] = s[j];
+      s[j] = tmp;
+    }
+    
     Sample **children = new Sample*[next_size];
     for(int i=0; i < next_size; i++) {
-      int p1_idx = rand()/(RAND_MAX + 1.0) * last_size;
-      int p2_idx = rand()/(RAND_MAX + 1.0) * last_size;
+      int p1_idx, p2_idx;
+      if (opts.ril == 1 && g > 0) {
+	p1_idx = p2_idx = s[i % last_size];
+      } else {
+	p1_idx = s[i % last_size];
+	p2_idx = s[(i+1) % last_size];
+      }
       
       children[i] = new Sample(parents[p1_idx], parents[p2_idx]);
     }
-
+    delete[] s;
+    
     for(int i=0; i < last_size; i++)
       delete parents[i];
     delete[] parents;

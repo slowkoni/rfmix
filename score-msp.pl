@@ -75,6 +75,7 @@ close F;
 close R;
 
 my ($diploid_accuracy, $haploid_accuracy) = (0, 0);
+my ($da_msq, $ha_msq) = (0, 0);
 for(my $i=0; $i < @diploid; $i++) {
   $diploid[$i] = 0 unless $diploid[$i];
   $haploid12[$i] = 0 unless $haploid12[$i];
@@ -88,11 +89,17 @@ for(my $i=0; $i < @diploid; $i++) {
   printf "%s\t%1.1f%%\t%1.1f%%\n", $i, $h*100., $d*100.;
 
   $diploid_accuracy += $d;
+  $da_msq += $d*$d;
   $haploid_accuracy += $h;
+  $ha_msq += $h*$h;
 }
 
-printf "Haploid accuracy = %1.2f%%\n", $haploid_accuracy / @diploid * 100.;
-printf "Diploid accuracy = %1.2f%%\n", $diploid_accuracy / @diploid * 100.;
+$haploid_accuracy /= @diploid;
+$diploid_accuracy /= @diploid;
+printf "Haploid accuracy = %1.2f%% +/- %1.2f\n", $haploid_accuracy * 100.,
+  sqrt($ha_msq/@diploid - $haploid_accuracy*$haploid_accuracy)*100.;
+printf "Diploid accuracy = %1.2f%% +/- %1.2f\n", $diploid_accuracy * 100.,
+  sqrt($da_msq/@diploid - $diploid_accuracy*$diploid_accuracy)*100.;
 
 for(my $i=1; $i < @m; $i++) {
   print "\t$i";

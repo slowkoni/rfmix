@@ -1,3 +1,4 @@
+/* (c) 2007-2016 Mark Hamilton Wright */
 #ifndef KONI_MM_H
 #define KONI_MM_H
 

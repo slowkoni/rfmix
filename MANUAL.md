@@ -26,22 +26,24 @@ Run the program with no command line options to see a list of options accepted a
 
 The following options are required:
 
-+ -f <query VCF/BCF file> 
-+ -r <reference VCF/BCF file>
-+ -m <sample map file>
-+ -g <genetic map file>
-+ -o <output basename>
-+ --chromosome=<chromosome to analyze>
+~~~~~~~~~~~~
+	-f <query VCF/BCF file> 
+	-r <reference VCF/BCF file>
+	-m <sample map file>
+	-g <genetic map file>
+	-o <output basename>
+	--chromosome=<chromosome to analyze>
+~~~~~~~~~~~~
 
 RFMIX will automatically perform an intersection of the query VCF and the reference VCF to determine SNPs which are in common between them. You do not need to do this yourself or do this for each specific combination of a query VCF file and various reference panels you might want to use. The 6 required options above are all that is needed to run the program.
 
 ### Output files
 
-RFMIX upon completion will output two main files of interest, the most likely assignment of subpoplations per CRF point (<output basename>.msp.tsv), and the marginal probabilities of each subpopulation being the ancestral population of the corresponding CRF point (<output basename>.fb.tsv). The latter is produced by computing the forward-backward algorithm on the CRF, and the former by using the Viterbi algorithm. The .msp.tsv file is condensed such that CRF windows are combined if all query samples are assigned the same probability for successive windows. Thus, each line might represent several CRF points.
+RFMIX upon completion will output two main files of interest, the most likely assignment of subpoplations per CRF point (\<output basename\>.msp.tsv), and the marginal probabilities of each subpopulation being the ancestral population of the corresponding CRF point (\<output basename\>.fb.tsv). The latter is produced by computing the forward-backward algorithm on the CRF, and the former by using the Viterbi algorithm. The .msp.tsv file is condensed such that CRF windows are combined if all query samples are assigned the same probability for successive windows. Thus, each line might represent several CRF points.
 
 Both output files are tab seperated values forming a matrix with rows corresponding to genomic position and columns corresponding to haplotypes. The files include column headers and leading columns that indicate the position or range covered for each row. For the forward-backward results, haplotypes are tab seperated, but the array of probabilities for each haplotype at each window (row) is a set of space delimited columns within each tab delimited haplotype column. The order and names of the reference subpopulations are indicated in a header row. 
 
-Global *diploid* ancestry estimates are computed by RFMIX and output to <output basename>.rfmix.Q, corresponding to the .Q output files of the global ancestry analysis programs fastStructure or ADMIXTURE. Please note that the ordering of subpopulations in columns for fastStructure or ADMIXTURE is not guaranteed to be the same as RFMIX and the ordering may change for different runs of those programs. RFMIX will always output in the same order (indicated in a header line) if the reference file used is the same. Additionally, RFMIX will add the sample name/id from the VCF input as a leading column.
+Global *diploid* ancestry estimates are computed by RFMIX and output to \<output basename\>.rfmix.Q, corresponding to the .Q output files of the global ancestry analysis programs fastStructure or ADMIXTURE. Please note that the ordering of subpopulations in columns for fastStructure or ADMIXTURE is not guaranteed to be the same as RFMIX and the ordering may change for different runs of those programs. RFMIX will always output in the same order (indicated in a header line) if the reference file used is the same. Additionally, RFMIX will add the sample name/id from the VCF input as a leading column.
 
 If EM is used (see below), output is generated on completion of each iteration, but each successive iteration overwrites the results of the previous. At completion of the program, the output files contain the final results from the last iteration.
 

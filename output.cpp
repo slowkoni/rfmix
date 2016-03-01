@@ -1,3 +1,15 @@
+/* RFMIX v2.XX - Local Ancestry and Admixture Analysis
+   Bustamante Lab - Stanford School of Medicine
+   (c) 2016 Mark Hamilton Wright
+
+   This program is licensed for academic research use only
+   unless otherwise stated. Contact cdbadmin@stanford.edu for
+   commercial licensing options.
+
+   Academic and research users should cite Brian Maples'
+   paper describing RFMIX in any publication using RFMIX
+   results. Citation is printed when the program is started. */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -182,7 +194,7 @@ void fb_stay_in_state_output(input_t *input) {
 
 #define Q_EXTENSION (".rfmix.Q")
 void output_Q(input_t *input) {
-  fprintf(stderr,"Outputing .Q.... \n");
+  fprintf(stderr,"Outputing diploid global ancestry estimates.... \n");
   int fname_length = strlen(rfmix_opts.output_basename) + strlen(Q_EXTENSION) + 1;
   char fname[fname_length];
 

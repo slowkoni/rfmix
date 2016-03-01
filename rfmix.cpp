@@ -1,3 +1,15 @@
+/* RFMIX v2.XX - Local Ancestry and Admixture Analysis
+   Bustamante Lab - Stanford School of Medicine
+   (c) 2016 Mark Hamilton Wright
+
+   This program is licensed for academic research use only
+   unless otherwise stated. Contact cdbadmin@stanford.edu for
+   commercial licensing options.
+
+   Academic and research users should cite Brian Maples'
+   paper describing RFMIX in any publication using RFMIX
+   results. Citation is printed when the program is started. */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,8 +78,8 @@ static option_t options[] = {
     "Force number of simultaneous thread for parallel execution" },
   { 0, "random-seed", &rfmix_opts.random_seed_str, OPT_STR, 0, 1,
     "Seed value for random number generation (integer)\n"
-    "\t(maybe specified in hexadecimal by preceeding with 0x), or the string \"clock\" \n"
-    "\tto seed with the current system time." },
+    "\t(maybe specified in hexadecimal by preceeding with 0x), or the string\n"
+    "\t\"clock\" to seed with the current system time." },
   { 0, NULL, NULL, 0, 0, 0, NULL }
 };
 

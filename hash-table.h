@@ -1,3 +1,4 @@
+/* (c) 2008-2016 Mark Hamilton Wright */
 #ifndef HASH_TABLE_H
 #define HASH_TABLE_H
 #include "kmacros.h"

@@ -1,3 +1,4 @@
+/* (c) 2007-2016 Mark Hamilton Wright */
 #ifndef _CMDLINE_UTILS_H
 #define _CMDLINE_UTILS_H
 
