@@ -102,7 +102,7 @@ static void init_options(void) {
   rfmix_opts.analyze_str = (char *) "";
   rfmix_opts.analyze_range[0] = INT_MIN;
   rfmix_opts.analyze_range[1] = INT_MAX;
-  rfmix_opts.crf_weight = 25.0;
+  rfmix_opts.crf_weight = -1.0;
   rfmix_opts.reanalyze_reference = 0;
   
   rfmix_opts.n_threads = sysconf(_SC_NPROCESSORS_CONF);
@@ -197,6 +197,8 @@ static void verify_options(void) {
     }
     free(p);
   }
+  if (rfmix_opts.crf_weight <= 0.0)
+    rfmix_opts.crf_weight = 2.0*rfmix_opts.rf_window_size/rfmix_opts.crf_spacing;
   
   if (rfmix_opts.n_threads < 1) rfmix_opts.n_threads = 1;
   if (strcmp(rfmix_opts.chromosome,"") == 0) {

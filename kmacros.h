@@ -1,3 +1,4 @@
+/* (c) 2007-2016 Mark Hamilton Wright */
 #ifndef KMACROS_H
 #define KMACROS_H
 #include <stdio.h>
