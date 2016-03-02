@@ -101,11 +101,6 @@ printf "Haploid accuracy = %1.2f%% +/- %1.2f\n", $haploid_accuracy * 100.,
 printf "Diploid accuracy = %1.2f%% +/- %1.2f\n", $diploid_accuracy * 100.,
   sqrt($da_msq/@diploid - $diploid_accuracy*$diploid_accuracy)*100.;
 
-for(my $i=1; $i < @m; $i++) {
-  print "\t$i";
-}
-print "\n";
-
 for(my $j=1; $j < @m; $j++) {
   my $d = 0;
   for(my $i=1; $i < @m; $i++) {
@@ -116,10 +111,50 @@ for(my $j=1; $j < @m; $j++) {
     $m[$i]->[$j] /= $d + 0.1;
   }
 }
-for(my $i=1; $i < @m; $i++) {  
-  printf "$i";
-  for(my $j=1; $j < @m; $j++) {
-    printf "\t%5.1f", $m[$i]->[$j] * 100.;
+print_matrix(\@m);
+printf "Determinant = %1.3f\n", det(\@m);
+
+sub print_matrix {
+  my ($m) = @_;
+
+  my $n = @{$m};
+
+  
+  for(my $i=1; $i < $n; $i++) {
+    print "\t$i";
   }
-  printf "\n"; 
+  print "\n";
+
+  for(my $i=1; $i < $n; $i++) {  
+    printf "$i";
+    for(my $j=1; $j < $n; $j++) {
+      printf "\t%5.1f", $$m[$i]->[$j] * 100.;
+    }
+    printf "\n"; 
+  }
+}
+
+sub det {
+  my ($m) = @_;
+
+  my $n = @{$m};
+  for(my $j=1; $j < $n; $j++) {
+    for(my $i=$j+1; $i < $n; $i++) {
+      if ($$m[$j]->[$i] > 1e-15) {
+	my $s = $$m[$j]->[$j] / $$m[$i]->[$j];
+      
+	for(my $k=1; $k < $n; $k++) {
+	  $$m[$i]->[$k] -= $$m[$j]->[$k] / $s;
+	}
+      }
+    }
+  }
+  #print_matrix($m);
+  
+  my $d = 1.;
+  for(my $j=1; $j < $n; $j++) {
+    $d *= $$m[$j]->[$j];
+  }
+
+  return $d;
 }
