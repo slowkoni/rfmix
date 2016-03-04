@@ -109,7 +109,7 @@ static void verify_options(void) {
 }
 
 #if 0
-static int load_subpop_map(char **subpops, Sample **samples, char *fname) {
+static int load_subpop_map(char **subpops, S_Sample **samples, char *fname) {
   f = fopen(fname, "r");
   if (f == NULL) {
     fprintf(stderr,"Can't open input file %s (%s)\n", fname, strerror(errno));
@@ -186,12 +186,12 @@ int main(int argc, char *argv[]) {
   fprintf(stderr,"%d SNPs across %d samples\n", vcf->n_snps, vcf->n_samples);
 
   int n_samples = 0;
-  Sample **parents = new Sample*[vcf->n_samples];
+  S_Sample **parents = new S_Sample*[vcf->n_samples];
   for(int i=0; i < vcf->n_samples; i++) {
     Subpop *s = Subpop::lookup_sample_subpop(vcf->samples[i].sample_id);
     if (s != NULL)
-      parents[n_samples++] = new Sample(vcf->samples[i].sample_id, s->idx, vcf->snps, vcf->n_snps,
-					vcf->samples[i].haplotypes[0], vcf->samples[i].haplotypes[1]);
+      parents[n_samples++] = new S_Sample(vcf->samples[i].sample_id, s->idx, vcf->snps, vcf->n_snps,
+					vcf->samples[i].haplotype[0], vcf->samples[i].haplotype[1]);
   }
 
   int last_size = n_samples;
@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
       s[j] = tmp;
     }
     
-    Sample **children = new Sample*[next_size];
+    S_Sample **children = new S_Sample*[next_size];
     for(int i=0; i < next_size; i++) {
       int p1_idx, p2_idx;
       if (opts.ril == 1 && g > 0) {
@@ -220,7 +220,7 @@ int main(int argc, char *argv[]) {
 	p2_idx = s[(i+1) % last_size];
       }
       
-      children[i] = new Sample(parents[p1_idx], parents[p2_idx]);
+      children[i] = new S_Sample(parents[p1_idx], parents[p2_idx]);
     }
     delete[] s;
     

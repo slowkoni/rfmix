@@ -25,6 +25,7 @@
 #include "kmacros.h"
 
 #include "rfmix.h"
+#include "gensamples.h"
 #include "load-input.h"
 #include "random-forest.h"
 
@@ -231,11 +232,50 @@ int main(int argc, char *argv[]) {
 
   fprintf(stderr,"\n");
   input_t *rfmix_input = load_input();
+  
+  fprintf(stderr,"Generating internal simulation samples...    ");
+  generate_simulated_samples(rfmix_input); /* simulation parents must be marked */
+  fprintf(stderr,"done.\n");
 
+  em_iteration = -1;
+  random_forest(rfmix_input); /* add flag to indicate exclude simulation parents? */
+
+  fprintf(stderr,"Scanning for optimal CRF Weight.... \n");
+  double max_d = -DBL_MAX;
+  double d;
+  double **m, **max_m = NULL;
+  int max_w = 1;
+  for(int w=1; w < 100; w++) {
+    crf(rfmix_input, w); /* add flag to indicate just run the simulation samples? */
+    d = score_msp(&m, &d, rfmix_input);
+    if (d > max_d) {
+      if (!isatty(2))
+	fprintf(stderr,"\r");
+      else
+	fprintf(stderr,"\n");
+      fprintf(stderr,"Conditional Random Field Weight %d = det(m) = %1.1f   \n", w, d*100.);      
+      max_w = w;
+      max_d = d;
+      max_m = m;
+    } else {
+      free_simulation_scoring_matrix(m, rfmix_input->n_subpops);
+    }
+  }
+  
+  if (isatty(2)) fprintf(stderr,"\n");
+  fprintf(stderr,"Maximum scoring weight is %d (%1.1f)\n", max_w, max_d*100.);
+  fprintf(stderr,"Simulation results... \n");
+  for(int k=0; k < rfmix_input->n_subpops; k++) {
+    fprintf(stderr,"\t%s", rfmix_input->reference_subpops[k]);
+  }
   fprintf(stderr,"\n");
+  print_simulation_scoring_matrix(max_m, rfmix_input->n_subpops);
+  fprintf(stderr,"\n");
+  free_simulation_scoring_matrix(max_m, rfmix_input->n_subpops);
+  
   em_iteration = 0;
   random_forest(rfmix_input);
-  double logl = crf(rfmix_input);
+  double logl = crf(rfmix_input, max_w);
   msp_output(rfmix_input);
   fb_output(rfmix_input);
   fb_stay_in_state_output(rfmix_input);
@@ -246,7 +286,7 @@ int main(int argc, char *argv[]) {
     em_iteration = i + 1;
     double last_logl = logl;
     random_forest(rfmix_input);
-    logl = crf(rfmix_input);
+    logl = crf(rfmix_input, max_w);
     double d = logl - last_logl;
 
     msp_output(rfmix_input);

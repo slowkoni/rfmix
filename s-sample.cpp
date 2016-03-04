@@ -19,11 +19,12 @@
 #include <math.h>
 
 #include "kmacros.h"
+#include "rfmix.h"
 #include "s-sample.h"
 
-HashTable *Sample::map = new HashTable(8192);
+HashTable *S_Sample::map = new HashTable(8192);
 
-Sample::Sample(char *sample_id, int subpop, snp_t *snps, int n_snps, int8_t *h1, int8_t *h2) {
+S_Sample::S_Sample(char *sample_id, int subpop, snp_t *snps, int n_snps, int8_t *h1, int8_t *h2) {
 
   this->sample_id = strdup(sample_id);
   this->snps = snps;
@@ -44,7 +45,7 @@ Sample::Sample(char *sample_id, int subpop, snp_t *snps, int n_snps, int8_t *h1,
   map->insert(sample_id, (void *) this);
 }
 
-Sample::Sample(Sample *p1, Sample *p2) {
+S_Sample::S_Sample(S_Sample *p1, S_Sample *p2) {
   sample_id = new char[12];
   snprintf(sample_id, 12, "%08x", rand());
 
@@ -67,7 +68,7 @@ Sample::Sample(Sample *p1, Sample *p2) {
   map->insert(sample_id, (void *) this);
 }
 
-Sample::~Sample(void) {
+S_Sample::~S_Sample(void) {
 
   free(sample_id);
   map->remove(sample_id);
@@ -79,7 +80,7 @@ Sample::~Sample(void) {
   n_snps = 0;
 }
 
-void Sample::meiosis(int8_t *gamate, int8_t *gamate_subpop) {
+void S_Sample::meiosis(int8_t *gamate, int8_t *gamate_subpop) {
   int sh = rand()/(RAND_MAX + 1.0) < 0.5 ? 0 : 1;
 
   int i = 0;
@@ -100,6 +101,6 @@ void Sample::meiosis(int8_t *gamate, int8_t *gamate_subpop) {
 
 }
  
-Sample *Sample::get_sample(char *sample_name) {
-  return (Sample *) map->lookup(sample_name);
+S_Sample *S_Sample::get_sample(char *sample_name) {
+  return (S_Sample *) map->lookup(sample_name);
 }

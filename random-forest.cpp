@@ -632,6 +632,20 @@ static void setup_ref_haplotypes(window_t *w, input_t *input, int start_snp, int
 
   int nrh = 0;
   for(i=0; i < n_samples; i++) {
+    /* Do not include the parents for the internal control simulation during
+       learning for an optimum CRF weight */
+    if (em_iteration == -1 && samples[i].s_parent == 1) continue;
+    
+    /* After learning the optimum weight, make sure not to use a simulation sample
+       in building the random forest. */
+    if (em_iteration != -1 && samples[i].s_sample == 1) continue;
+
+    /* In the initial, non simulation control iteration, we have no estimates for
+       ancestry on the query individuals, so skip them */
+    if (em_iteration <= 0 && samples[i].apriori_subpop == -1) continue;
+
+    /* At this point, we the sample may be included if its haplotypes have strong
+       enough estimates - we check that for the individual haplotype */
     for(h=0; h < 2; h++) {
 
       // unpack the haplotype's current_p and find the subpop with the max probability
@@ -642,7 +656,7 @@ static void setup_ref_haplotypes(window_t *w, input_t *input, int start_snp, int
       }
 
       // If this haplotype is suitable for use as reference, add it
-      if ((samples[i].apriori_subpop != -1 || em_iteration > 0) && p_tmp[max] > P_MINIMUM_FOR_REF) {
+      if (p_tmp[max] > P_MINIMUM_FOR_REF) {
 	rh[nrh].haplotype = (int *) ma->allocate(sizeof(int)*n_snps, WHEREFROM);
 	rh[nrh].current_p = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
 	
