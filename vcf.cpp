@@ -110,7 +110,6 @@ void VCF::parse_samples(char *sample_line) {
     sample_map->insert(samples[i].sample_id, samples + i);
     column_map[samples[i].column_idx] = samples + i;
   }
-  
 }
 
 void VCF::load_snps(char *chromosome, GeneticMap *genetic_map) {
@@ -143,6 +142,7 @@ void VCF::load_snps(char *chromosome, GeneticMap *genetic_map) {
     
     n_snps++;
   }
+
 }
 
 void VCF::load_haplotypes(char *chromosome) {
@@ -191,7 +191,7 @@ void VCF::load_haplotypes(char *chromosome) {
     }
     s++;
   }
-  
+
 }
 
 VCF::VCF(char *vcf_fname, char *chm) {
@@ -209,7 +209,6 @@ VCF::VCF(char *vcf_fname, char *chm) {
 
   this->f = new Inputline(fname, chm);
   char *sample_line = vcf_skip_headers(f);
-
   parse_samples(sample_line);
 }
 

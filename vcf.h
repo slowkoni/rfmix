@@ -13,7 +13,9 @@
 #ifndef VCF_H
 #define VCF_H
 
+
 #include <stdint.h>
+#include "rfmix.h"
 #include "genetic-map.h"
 #include "inputline.h"
 #include "hash-table.h"

@@ -296,7 +296,7 @@ static void *crf_thread(void *targ) {
 	logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
 		       input->n_subpops, input->snps, args->crf_weight, ma);
 	if (h < 2) total_logl += logl;
-	//	if (em_iteration != -1)
+	if (em_iteration != -1)
 	  forward_backward(input->samples + i, h, input->crf_windows, input->n_windows,
 			   input->n_subpops, args->crf_weight, ma);
       }
@@ -352,10 +352,6 @@ double crf(input_t *input, double w) {
 
   for(int i=0; i < rfmix_opts.n_threads; i++)
     pthread_join(threads[i], NULL);
-  if (em_iteration > 0) {
-    fprintf(stderr,"\n");
-    fprintf(stderr,"Viterbi MSP logl = %1.5f\n", args.viterbi_logl);
-  }
   
 #if 0
   dump_results(input);

@@ -183,7 +183,6 @@ int main(int argc, char *argv[]) {
   
   vcf->load_snps(opts.chromosome, genetic_map);
   vcf->load_haplotypes(opts.chromosome);
-  fprintf(stderr,"%d SNPs across %d samples\n", vcf->n_snps, vcf->n_samples);
 
   int n_samples = 0;
   S_Sample **parents = new S_Sample*[vcf->n_samples];
@@ -197,21 +196,23 @@ int main(int argc, char *argv[]) {
   int last_size = n_samples;
   for(int g=0; g < opts.n_generations; g++) {
     int next_size = last_size * opts.growth_rate;
-
     int i;
     int *s = new int[last_size];
     for(i=0; i < last_size; i++)
       s[i] = i;
     
-    for(i=0; i < last_size; i++) {
-      int j = rand()/(RAND_MAX + 1.0) * last_size;
-      int tmp = s[i];
-      s[i] = s[j];
-      s[j] = tmp;
-    }
     
     S_Sample **children = new S_Sample*[next_size];
     for(int i=0; i < next_size; i++) {
+      if (i % last_size == 0) {
+	for(int k=0; k < last_size; k++) {
+	  int j = rand()/(RAND_MAX + 1.0) * last_size;
+	  int tmp = s[k];
+	  s[k] = s[j];
+	  s[j] = tmp;
+	}
+      }
+      
       int p1_idx, p2_idx;
       if (opts.ril == 1 && g > 0) {
 	p1_idx = p2_idx = s[i % last_size];
@@ -231,7 +232,8 @@ int main(int argc, char *argv[]) {
     last_size = next_size;
     parents = children;
   }
-
+  fprintf(stderr,"Final simulated population size is %d diploid individuals\n", last_size);
+  
   char vcf_out_fname[strlen(opts.output_basename) + strlen(".query.vcf") + 1];
   sprintf(vcf_out_fname,"%s.query.vcf", opts.output_basename);
   char result_fname[strlen(opts.output_basename) + strlen(".result") + 1];

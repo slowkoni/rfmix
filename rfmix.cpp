@@ -223,8 +223,89 @@ static void verify_options(void) {
   }
 }
 
-int main(int argc, char *argv[]) {
 
+static double do_iteration(input_t *input, double crf_weight) {
+
+  fprintf(stderr,"\n");
+  random_forest(input);
+  double logl = crf(input, crf_weight);
+  if (em_iteration > 0) {
+    fprintf(stderr,"\n");
+    fprintf(stderr,"EM iteration %d/%d - logl = %1.1f\n", em_iteration, rfmix_opts.em_iterations,
+	    logl);
+  }
+
+  /* No output if em_iteration == -1 and we are in the internal simulation
+     phase. Otherwise, update the output every EM iteration. If the user
+     stops the program with CTRL-c after the initial analysis (em_iteration == 0),
+     the output for the previous EM iteration will be available, as long as
+     the program is not stopped while it is outputting. */
+  if (em_iteration >= 0) {
+    fprintf(stderr,"\n");
+    msp_output(input);
+    fb_output(input);
+    fb_stay_in_state_output(input);
+    output_Q(input);
+   }
+
+  return logl;
+}
+
+static double find_optimal_crf_weight(input_t *input) {
+
+  fprintf(stderr,"Generating internal simulation samples...    ");
+  generate_simulated_samples(input);
+
+  em_iteration = -1;
+  random_forest(input);
+
+  fprintf(stderr,"Scanning for optimal CRF Weight.... \n");
+
+  double max_d = -DBL_MAX;
+  double d;
+  double **m, **max_m = NULL;
+  int max_w = 1;
+  for(int w=1; w < 100; w++) {
+    crf(input, w);
+    d = score_msp(&m, &d, input);
+    if (d > max_d) {
+      if (!isatty(2))
+	fprintf(stderr,"\n");
+      else
+	fprintf(stderr,"\r");
+      fprintf(stderr,"Conditional Random Field Weight %d - det(m) = %1.1f             ",
+	      w, d*100.);      
+      if (!isatty(2)) fprintf(stderr,"\n");
+      max_w = w;
+      max_d = d;
+      max_m = m;
+    } else {
+      free_simulation_scoring_matrix(m, input->n_subpops);
+    }
+
+    /* Generally once we have climbed to a maximum, higher weights will not
+       produce better results and the results will rapidly degrade. When that
+       is definitely occurring, stop this process as we are just wasting time */
+    if (w > 2 && d < max_d / 2.) break;
+  }
+  
+  if (isatty(2)) fprintf(stderr,"\n");
+  fprintf(stderr,"\nMaximum scoring weight is %d (%1.1f)\n", max_w, max_d*100.);
+  fprintf(stderr,"Simulation results... \n");
+  for(int k=0; k < input->n_subpops; k++) {
+    fprintf(stderr,"\t%s", input->reference_subpops[k]);
+  }
+  fprintf(stderr,"\n");
+  print_simulation_scoring_matrix(max_m, input->n_subpops);
+  fprintf(stderr,"\n");
+  free_simulation_scoring_matrix(max_m, input->n_subpops);
+
+  return max_w;
+}
+
+int main(int argc, char *argv[]) {
+  double logl, last_logl, crf_weight;
+  
   print_banner();
   init_options();
   cmdline_getoptions(options, argc, argv);
@@ -232,73 +313,34 @@ int main(int argc, char *argv[]) {
 
   fprintf(stderr,"\n");
   input_t *rfmix_input = load_input();
-  
-  fprintf(stderr,"Generating internal simulation samples...    ");
-  generate_simulated_samples(rfmix_input); /* simulation parents must be marked */
-  fprintf(stderr,"done.\n");
+  fprintf(stderr,"\n");
 
+  /* em_iteration at -1 tells random forest to hold out the simulation parents
+     from the reference and crf to only analyze the simulation samples */
   em_iteration = -1;
-  random_forest(rfmix_input); /* add flag to indicate exclude simulation parents? */
+  crf_weight = find_optimal_crf_weight(rfmix_input);
 
-  fprintf(stderr,"Scanning for optimal CRF Weight.... \n");
-  double max_d = -DBL_MAX;
-  double d;
-  double **m, **max_m = NULL;
-  int max_w = 1;
-  for(int w=1; w < 100; w++) {
-    crf(rfmix_input, w); /* add flag to indicate just run the simulation samples? */
-    d = score_msp(&m, &d, rfmix_input);
-    if (d > max_d) {
-      if (!isatty(2))
-	fprintf(stderr,"\r");
-      else
-	fprintf(stderr,"\n");
-      fprintf(stderr,"Conditional Random Field Weight %d = det(m) = %1.1f   \n", w, d*100.);      
-      max_w = w;
-      max_d = d;
-      max_m = m;
-    } else {
-      free_simulation_scoring_matrix(m, rfmix_input->n_subpops);
-    }
-  }
-  
-  if (isatty(2)) fprintf(stderr,"\n");
-  fprintf(stderr,"Maximum scoring weight is %d (%1.1f)\n", max_w, max_d*100.);
-  fprintf(stderr,"Simulation results... \n");
-  for(int k=0; k < rfmix_input->n_subpops; k++) {
-    fprintf(stderr,"\t%s", rfmix_input->reference_subpops[k]);
-  }
-  fprintf(stderr,"\n");
-  print_simulation_scoring_matrix(max_m, rfmix_input->n_subpops);
-  fprintf(stderr,"\n");
-  free_simulation_scoring_matrix(max_m, rfmix_input->n_subpops);
-  
+  /* at em_iteration 0 and above, simulation samples are ignored and the 
+     simulation parents are returned to the reference */
   em_iteration = 0;
-  random_forest(rfmix_input);
-  double logl = crf(rfmix_input, max_w);
-  msp_output(rfmix_input);
-  fb_output(rfmix_input);
-  fb_stay_in_state_output(rfmix_input);
-  output_Q(rfmix_input);
-  fprintf(stderr,"Initial analysis - logl %1.1f\n\n", logl);
+  logl = do_iteration(rfmix_input, crf_weight);
+  fprintf(stderr,"Initial analysis - logl %1.1f\n", logl);
 
+  /* at em_iteration 1 and above, query samples with their present ancestry
+     estimates from the crf are added to the reference and then reanalyzed.
+     If --analyze-reference was specified, reference samples are also analyzed
+     and their local ancestry refined */
   for(int i=0; i < rfmix_opts.em_iterations; i++) {
     em_iteration = i + 1;
-    double last_logl = logl;
-    random_forest(rfmix_input);
-    logl = crf(rfmix_input, max_w);
-    double d = logl - last_logl;
+    last_logl = logl;
 
-    msp_output(rfmix_input);
-    fb_output(rfmix_input);
-    fb_stay_in_state_output(rfmix_input);
-    output_Q(rfmix_input);
-    
-    fprintf(stderr,"EM iteration %d - logl %1.1f (%+1.1f)\n\n", i+1, logl, d);
-    if (i > 0 && d < 0.1) break;
+    logl = do_iteration(rfmix_input, crf_weight);
+    if (i > 0 && logl - last_logl < 0.1) {
+      fprintf(stderr,"EM converges at iteration %d\n", em_iteration);
+      break;
+    }
   }
-  
-  
+   
   free_input(rfmix_input);
   return 0;
 }
