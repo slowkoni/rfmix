@@ -58,14 +58,14 @@ static void msp_output_leader(FILE *f, snp_t *snps, int n_snps, crf_window_t *cr
 
 static void msp_output_result(FILE *f, sample_t *samples, int n_samples, int w) {
   for(int j=0; j < n_samples; j++) {
-    if (samples[j].apriori_subpop != -1) continue;
+    if (samples[j].apriori_subpop != -1 || samples[j].s_sample == 1) continue;
     fprintf(f,"\t%d\t%d", samples[j].msp[0][w], samples[j].msp[1][w]);
   }
 }
 
 static int msp_compare(sample_t *samples, int n_samples, int n_windows, int a, int b) {
   for(int j=0; j < n_samples; j++) {
-    if (samples[j].apriori_subpop != -1) continue;
+    if (samples[j].apriori_subpop != -1 || samples[j].s_sample == 1) continue;
     if (samples[j].msp[0][a] != samples[j].msp[0][b] ||
 	samples[j].msp[1][a] != samples[j].msp[1][b]) return 1;
   }
@@ -94,7 +94,7 @@ void msp_output(input_t *input) {
   fprintf(f,"#chm\tspos\tepos\tsgpos\tegpos\tn snps");
   for(int j=0; j < input->n_samples; j++) {
     sample_t *sample = input->samples + j;
-    if (sample->apriori_subpop != -1) continue;
+    if (sample->apriori_subpop != -1 || sample->s_sample == 1) continue;
 
     fprintf(f,"\t%s.0\t%s.1", sample->sample_id, sample->sample_id);
   }
@@ -143,7 +143,7 @@ void fb_output(input_t *input) {
   fprintf(f,"#chm\tpos\tgpos\tsnp idx");
   for(int j=0; j < input->n_samples; j++) {
     sample_t *sample = input->samples + j;
-    if (sample->apriori_subpop != -1) continue;
+    if (sample->apriori_subpop != -1 || sample->s_sample == 1) continue;
 
     fprintf(f,"\t%s.0\t%s.1", sample->sample_id, sample->sample_id);
   }
@@ -153,7 +153,7 @@ void fb_output(input_t *input) {
     fprintf(f,"%s\t%d\t%1.5f\t%d", rfmix_opts.chromosome, input->snps[input->crf_windows[i].snp_idx].pos,
     	    input->crf_windows[i].genetic_pos*100.,input->crf_windows[i].snp_idx);
     for(int j=0; j < input->n_samples; j++) {
-      if (input->samples[j].apriori_subpop != -1) continue;
+      if (input->samples[j].apriori_subpop != -1 || input->samples[j].s_sample == 1) continue;
       for(int h=0; h < 2; h++) {
 	fprintf(f,"\t");
 	fb_output_haplotype(f, input->samples[j].current_p[h] + i*input->n_subpops, input->n_subpops);
@@ -185,7 +185,7 @@ void fb_stay_in_state_output(input_t *input) {
     fprintf(f,"%s\t%d\t%1.5f\t%d", rfmix_opts.chromosome, input->snps[input->crf_windows[i].snp_idx].pos,
 	    input->crf_windows[i].genetic_pos*100., input->crf_windows[i].snp_idx);    
     for(int j=0; j < input->n_samples; j++) {
-      if (input->samples[j].apriori_subpop != -1) continue;
+      if (input->samples[j].apriori_subpop != -1 || input->samples[j].s_sample == 1) continue;
       fprintf(f,"\t%1.5f\t%1.5f", input->samples[j].sis_p[0][i], input->samples[j].sis_p[1][i]);
     }
     fprintf(f,"\n");
@@ -215,7 +215,7 @@ void output_Q(input_t *input) {
   double q[input->n_subpops];
   for(int i=0; i < input->n_samples; i++) {
     sample_t *sample = input->samples + i;
-    if (sample->apriori_subpop != -1 && rfmix_opts.em_iterations == 0) continue;
+    if ((sample->apriori_subpop != -1 && rfmix_opts.em_iterations == 0) || sample->s_sample == 1) continue;
     
     for(int k=0; k < input->n_subpops; k++) q[k] = 0.;
     for(int j=0; j < input->n_windows; j++) {

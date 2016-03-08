@@ -13,16 +13,19 @@
 #ifndef VCF_H
 #define VCF_H
 
+
 #include <stdint.h>
+#include "rfmix.h"
 #include "genetic-map.h"
 #include "inputline.h"
 #include "hash-table.h"
 
+#ifndef RFMIX_H
 typedef struct {
   int sample_idx;
   int column_idx;
   char *sample_id;
-  int8_t *haplotypes[2];
+  int8_t *haplotype[2];
 } sample_t;
 
 typedef struct {
@@ -32,6 +35,7 @@ typedef struct {
   char *ref;
   char *alt;
 } snp_t;
+#endif
 
 #define ALLELE_ALLOC_STEP (16)
 class VCF {

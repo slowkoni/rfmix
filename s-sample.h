@@ -16,13 +16,13 @@
 #include "vcf.h"
 #include "hash-table.h"
 
-class Sample {
+class S_Sample {
  public:
   char *sample_id;
-  Sample(char *sample_id, int subpop, snp_t *snps, int n_snps, int8_t *haplotype1, int8_t *haplotype2);
-  Sample(Sample *p1, Sample *p2);
-  ~Sample();
-  static Sample *get_sample(char *sample_name);
+  S_Sample(char *sample_id, int subpop, snp_t *snps, int n_snps, int8_t *haplotype1, int8_t *haplotype2);
+  S_Sample(S_Sample *p1, S_Sample *p2);
+  ~S_Sample();
+  static S_Sample *get_sample(char *sample_name);
   int8_t *haplotype[2];
   int8_t *subpop[2];
   

@@ -109,7 +109,7 @@ static void verify_options(void) {
 }
 
 #if 0
-static int load_subpop_map(char **subpops, Sample **samples, char *fname) {
+static int load_subpop_map(char **subpops, S_Sample **samples, char *fname) {
   f = fopen(fname, "r");
   if (f == NULL) {
     fprintf(stderr,"Can't open input file %s (%s)\n", fname, strerror(errno));
@@ -183,35 +183,36 @@ int main(int argc, char *argv[]) {
   
   vcf->load_snps(opts.chromosome, genetic_map);
   vcf->load_haplotypes(opts.chromosome);
-  fprintf(stderr,"%d SNPs across %d samples\n", vcf->n_snps, vcf->n_samples);
 
   int n_samples = 0;
-  Sample **parents = new Sample*[vcf->n_samples];
+  S_Sample **parents = new S_Sample*[vcf->n_samples];
   for(int i=0; i < vcf->n_samples; i++) {
     Subpop *s = Subpop::lookup_sample_subpop(vcf->samples[i].sample_id);
     if (s != NULL)
-      parents[n_samples++] = new Sample(vcf->samples[i].sample_id, s->idx, vcf->snps, vcf->n_snps,
-					vcf->samples[i].haplotypes[0], vcf->samples[i].haplotypes[1]);
+      parents[n_samples++] = new S_Sample(vcf->samples[i].sample_id, s->idx, vcf->snps, vcf->n_snps,
+					vcf->samples[i].haplotype[0], vcf->samples[i].haplotype[1]);
   }
 
   int last_size = n_samples;
   for(int g=0; g < opts.n_generations; g++) {
     int next_size = last_size * opts.growth_rate;
-
     int i;
     int *s = new int[last_size];
     for(i=0; i < last_size; i++)
       s[i] = i;
     
-    for(i=0; i < last_size; i++) {
-      int j = rand()/(RAND_MAX + 1.0) * last_size;
-      int tmp = s[i];
-      s[i] = s[j];
-      s[j] = tmp;
-    }
     
-    Sample **children = new Sample*[next_size];
+    S_Sample **children = new S_Sample*[next_size];
     for(int i=0; i < next_size; i++) {
+      if (i % last_size == 0) {
+	for(int k=0; k < last_size; k++) {
+	  int j = rand()/(RAND_MAX + 1.0) * last_size;
+	  int tmp = s[k];
+	  s[k] = s[j];
+	  s[j] = tmp;
+	}
+      }
+      
       int p1_idx, p2_idx;
       if (opts.ril == 1 && g > 0) {
 	p1_idx = p2_idx = s[i % last_size];
@@ -220,7 +221,7 @@ int main(int argc, char *argv[]) {
 	p2_idx = s[(i+1) % last_size];
       }
       
-      children[i] = new Sample(parents[p1_idx], parents[p2_idx]);
+      children[i] = new S_Sample(parents[p1_idx], parents[p2_idx]);
     }
     delete[] s;
     
@@ -231,7 +232,8 @@ int main(int argc, char *argv[]) {
     last_size = next_size;
     parents = children;
   }
-
+  fprintf(stderr,"Final simulated population size is %d diploid individuals\n", last_size);
+  
   char vcf_out_fname[strlen(opts.output_basename) + strlen(".query.vcf") + 1];
   sprintf(vcf_out_fname,"%s.query.vcf", opts.output_basename);
   char result_fname[strlen(opts.output_basename) + strlen(".result") + 1];

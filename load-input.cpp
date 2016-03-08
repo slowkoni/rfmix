@@ -231,8 +231,16 @@ static void load_samples(input_t *input) {
     samples[i].logl[1] = -DBL_MAX;
     samples[i].logl[2] = -DBL_MAX;
     samples[i].logl[3] = -DBL_MAX;
+    samples[i].msp[0] = NULL;
+    samples[i].msp[1] = NULL;
+    samples[i].msp[2] = NULL;
+    samples[i].msp[3] = NULL;
+    samples[i].ksp[0] = NULL;
+    samples[i].ksp[1] = NULL;
   }
-
+  samples[i].s_sample = 0;
+  samples[i].s_parent = 0;
+  
   /* All work of this function is stored into the input_t struct and made available
      essentially everywhere through that */
   input->samples = samples;

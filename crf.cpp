@@ -55,12 +55,12 @@ static void __attribute__((unused))lnormalize_vector(double *p, int n) {
     p[i] = p[i]/pd_sum;  
 }
 
-#define SAMPLES_PER_BLOCK (8)
 typedef struct {
   int next_sample;
   int samples_completed;
   input_t *input;
   double viterbi_logl;
+  double crf_weight;
   
   pthread_mutex_t lock;
 } thread_args_t;
@@ -76,7 +76,7 @@ static void compute_state_change(double *r_stay, double *r_change, double d, int
 }
 
 static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows,
-		      int n_windows, int n_subpops, snp_t *snps, mm *ma) {
+		      int n_windows, int n_subpops, snp_t *snps, double w, mm *ma) {
   int i, j, k;
 
   /* Decode the estimated probabilities from random forest and cache in an array
@@ -124,7 +124,7 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
     
     compute_state_change(&stay, &change,
 			 crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos,
-			 rfmix_opts.n_generations, rfmix_opts.crf_weight);
+			 rfmix_opts.n_generations,w);
     double log_stay = (double) log(stay);
     double log_change = (double) log(change);
     
@@ -174,7 +174,7 @@ static double viterbi(sample_t *sample, int haplotype, crf_window_t *crf_windows
 
 //#define DEBUG
 static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_windows,
-			     int n_windows, int n_subpops, mm *ma) {
+			     int n_windows, int n_subpops, double w, mm *ma) {
   int i, j, k;
   double change, stay;
   
@@ -187,7 +187,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
 
   for(i=1; i < n_windows; i++) {
     double gd = crf_windows[i].genetic_pos - crf_windows[i-1].genetic_pos;
-    compute_state_change(&stay, &change, gd, rfmix_opts.n_generations, rfmix_opts.crf_weight);
+    compute_state_change(&stay, &change, gd, rfmix_opts.n_generations, w);
     for(j=0; j < n_subpops; j++) {
       alpha[ IDX(i,j) ] = 0.;
       for(k=0; k < n_subpops; k++)
@@ -210,7 +210,7 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   
   for(i=n_windows-2; i >=0 ; i--) {
     double gd = crf_windows[i+1].genetic_pos - crf_windows[i].genetic_pos;
-    compute_state_change(&stay, &change, gd, rfmix_opts.n_generations, rfmix_opts.crf_weight);
+    compute_state_change(&stay, &change, gd, rfmix_opts.n_generations, w);
 
     for(j=0; j < n_subpops; j++) {
       beta[ IDX(i,j) ] = 0.;
@@ -263,7 +263,6 @@ static void forward_backward(sample_t *sample, int haplotype, crf_window_t *crf_
   }
 }
 
-
 static void *crf_thread(void *targ) {
   thread_args_t *args;
   input_t *input;
@@ -280,21 +279,26 @@ static void *crf_thread(void *targ) {
     start_sample = args->next_sample;
     if (args->next_sample >= input->n_samples) break;
     
-    end_sample = start_sample + SAMPLES_PER_BLOCK;
+    end_sample = start_sample + CRF_SAMPLES_PER_BLOCK;
     if (end_sample > input->n_samples) end_sample = input->n_samples;
     args->next_sample = end_sample;
     pthread_mutex_unlock(&args->lock);
 
     for(int i=start_sample; i < end_sample; i++) {
-      if ((rfmix_opts.em_iterations > 0 && rfmix_opts.reanalyze_reference) ||
-	  input->samples[i].apriori_subpop == -1) {
-	for(int h=0; h < 4; h++) {
-	  logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
-			 input->n_subpops, input->snps, ma);
-	  if (h < 2) total_logl += logl;
+      /* During the internal simulation for finding optimum CRF weight, we are only
+	 concerned with doing the CRF on the internal simulation samples */
+      if (em_iteration == -1 && input->samples[i].s_sample != 1) continue;
+
+      /* Skip the CRF for reference samples if --reanalyze-reference is not on */
+      if (input->samples[i].apriori_subpop != -1 && rfmix_opts.reanalyze_reference == 0) continue;
+      
+      for(int h=0; h < 4; h++) {
+	logl = viterbi(input->samples + i, h, input->crf_windows, input->n_windows,
+		       input->n_subpops, input->snps, args->crf_weight, ma);
+	if (h < 2) total_logl += logl;
+	if (em_iteration != -1)
 	  forward_backward(input->samples + i, h, input->crf_windows, input->n_windows,
-			   input->n_subpops, ma);
-	}
+			   input->n_subpops, args->crf_weight, ma);
       }
     }
     ma->recycle();
@@ -332,7 +336,7 @@ static void __attribute__((unused))dump_results(input_t *input) {
   }
 }
 
-double crf(input_t *input) {
+double crf(input_t *input, double w) {
   thread_args_t args;
   pthread_t threads[rfmix_opts.n_threads];
 
@@ -340,6 +344,7 @@ double crf(input_t *input) {
   args.samples_completed = 0;
   args.input = input;
   args.viterbi_logl = 0.;
+  args.crf_weight = w;
  
   pthread_mutex_init(&args.lock, NULL);
   for(int i=0; i < rfmix_opts.n_threads; i++)
@@ -347,8 +352,6 @@ double crf(input_t *input) {
 
   for(int i=0; i < rfmix_opts.n_threads; i++)
     pthread_join(threads[i], NULL);
-  fprintf(stderr,"\n");
-  fprintf(stderr,"Viterbi MSP logl = %1.5f\n", args.viterbi_logl);
   
 #if 0
   dump_results(input);

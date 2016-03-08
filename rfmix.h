@@ -120,6 +120,9 @@ typedef struct {
   int pos;
   AF_TYPE genetic_pos;
   int crf_index; // CRF window index for this snp
+  char *ref;
+  char *alt;
+  char *snp_id;
 } snp_t;
 
 /* IMPORTANT: Because pointers take 8 bytes and the number of subpops is often small but 
@@ -141,10 +144,16 @@ typedef struct {
   int apriori_subpop; // 0 means query/admixed/unknown sample. 1 through K, reference sample
   int8_t *haplotype[2];
   int8_t *msp[4];
+  int8_t *ksp[2]; /* known state path, allocated and set only for internal simulated samples */
   double logl[4];
   int16_t *current_p[2]; // current estimate of probability of subpop [hap][ IDX(crf_window,subpop) ]
   int16_t *est_p[4]; // new estimate of probability of subpop estimate [hap][ IDX(crf_window,subpop) ]
   float *sis_p[2]; // Suyash stay-in-state forward-backward probability [hap][ crf_window ]
+
+  int column_idx;
+  int sample_idx;
+  int s_parent;
+  int s_sample;
 } sample_t;
 
 typedef struct {
@@ -171,8 +180,12 @@ enum { RF_BOOTSTRAP_FLAT=0, RF_BOOTSTRAP_HIERARCHICAL, RF_BOOTSTRAP_STRATIFIED, 
 #define MINIMUM_GENETIC_DISTANCE (0.00001)
 #define P_MINIMUM_FOR_REF (0.0)
 #define RF_THREAD_WINDOW_CHUNK_SIZE (3)
+#define CRF_SAMPLES_PER_BLOCK (32)
+#define SIM_PARENT_PROPORTION (0.10)
+#define SIM_GROWTH_RATE (1.20)
+#define SIM_SAMPLES_PER_SUBPOP (200)
 
-double crf(input_t *input);
+double crf(input_t *input, double w);
 
 void msp_output(input_t *input);
 void fb_output(input_t *input);

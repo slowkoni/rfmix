@@ -17,6 +17,7 @@
 
 #include "kmacros.h"
 #include "inputline.h"
+#include "rfmix.h"
 #include "vcf.h"
 
 int VCF::n_alleles = 0;
@@ -94,8 +95,8 @@ void VCF::parse_samples(char *sample_line) {
     samples[n_samples].sample_idx = n_samples;
     samples[n_samples].column_idx = col_idx;
     samples[n_samples].sample_id = strdup(q);
-    samples[n_samples].haplotypes[0] = NULL;
-    samples[n_samples].haplotypes[1] = NULL;
+    samples[n_samples].haplotype[0] = NULL;
+    samples[n_samples].haplotype[1] = NULL;
     
     n_samples++;
     col_idx++;
@@ -109,7 +110,6 @@ void VCF::parse_samples(char *sample_line) {
     sample_map->insert(samples[i].sample_id, samples + i);
     column_map[samples[i].column_idx] = samples + i;
   }
-  
 }
 
 void VCF::load_snps(char *chromosome, GeneticMap *genetic_map) {
@@ -142,6 +142,7 @@ void VCF::load_snps(char *chromosome, GeneticMap *genetic_map) {
     
     n_snps++;
   }
+
 }
 
 void VCF::load_haplotypes(char *chromosome) {
@@ -153,11 +154,11 @@ void VCF::load_haplotypes(char *chromosome) {
   skip_to_chromosome(f, chromosome);
 
   for(int i=0; i < n_samples; i++) {
-    MA(samples[i].haplotypes[0], sizeof(int8_t)*n_snps, int8_t);
-    MA(samples[i].haplotypes[1], sizeof(int8_t)*n_snps, int8_t);
+    MA(samples[i].haplotype[0], sizeof(int8_t)*n_snps, int8_t);
+    MA(samples[i].haplotype[1], sizeof(int8_t)*n_snps, int8_t);
     for(int j=0; j < n_samples; j++) {
-      samples[i].haplotypes[0][j] = 2;
-      samples[i].haplotypes[1][j] = 2;
+      samples[i].haplotype[0][j] = 2;
+      samples[i].haplotype[1][j] = 2;
     }
   }
   
@@ -184,13 +185,13 @@ void VCF::load_haplotypes(char *chromosome) {
       sample_t *sample = column_map[col_idx];
       if (sample == NULL) continue;
 
-      sample->haplotypes[0][s] = get_allele(q[0]);
-      sample->haplotypes[1][s] = get_allele(q[2]);
+      sample->haplotype[0][s] = get_allele(q[0]);
+      sample->haplotype[1][s] = get_allele(q[2]);
       col_idx++;
     }
     s++;
   }
-  
+
 }
 
 VCF::VCF(char *vcf_fname, char *chm) {
@@ -208,7 +209,6 @@ VCF::VCF(char *vcf_fname, char *chm) {
 
   this->f = new Inputline(fname, chm);
   char *sample_line = vcf_skip_headers(f);
-
   parse_samples(sample_line);
 }
 
