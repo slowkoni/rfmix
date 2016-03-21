@@ -159,7 +159,9 @@ void generate_simulated_samples(input_t *input) {
     }
   }
   input->n_samples += n_parents;
-  
+
+  // parents[] points to children[] here - this also deletes children[]
+  delete[] parents;
 }
 
 void print_simulation_scoring_matrix(double **m, int n) {

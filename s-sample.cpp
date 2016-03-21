@@ -26,7 +26,8 @@ HashTable *S_Sample::map = new HashTable(8192);
 
 S_Sample::S_Sample(char *sample_id, int subpop, snp_t *snps, int n_snps, int8_t *h1, int8_t *h2) {
 
-  this->sample_id = strdup(sample_id);
+  this->sample_id = new char[strlen(sample_id)+1];
+  strcpy(this->sample_id, sample_id);
   this->snps = snps;
   this->n_snps = n_snps;
   
@@ -70,8 +71,8 @@ S_Sample::S_Sample(S_Sample *p1, S_Sample *p2) {
 
 S_Sample::~S_Sample(void) {
 
-  free(sample_id);
   map->remove(sample_id);
+  delete[] sample_id;
   delete[] haplotype[0];
   delete[] haplotype[1];
   delete[] subpop[0];

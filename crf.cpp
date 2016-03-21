@@ -267,7 +267,7 @@ static void *crf_thread(void *targ) {
   thread_args_t *args;
   input_t *input;
   int start_sample, end_sample;
-  mm *ma = new mm(16, WHEREFROM);
+  mm *ma = new mm(64, WHEREFROM);
   double total_logl = 0.;
   double logl;
   

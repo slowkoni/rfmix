@@ -140,6 +140,11 @@ static void verify_options(void) {
     fprintf(stderr,"\nSpecify reference VCF input file with -r option");
     stop = 1;
   }
+  if (strcmp(rfmix_opts.qvcf_fname, rfmix_opts.rvcf_fname) == 0) {
+    fprintf(stderr,"\nQuery and reference may not be the same file");
+    stop = 1;
+  }
+  
   if (strcmp(rfmix_opts.genetic_fname,"") == 0) {
     fprintf(stderr,"\nSpecify genetic map file with -g option");
     stop = 1;
@@ -224,16 +229,11 @@ static void verify_options(void) {
 }
 
 
-static double do_iteration(input_t *input, double crf_weight) {
+static double do_iteration(input_t *input, double crf_weight, double last_logl) {
 
   fprintf(stderr,"\n");
   random_forest(input);
   double logl = crf(input, crf_weight);
-  if (em_iteration > 0) {
-    fprintf(stderr,"\n");
-    fprintf(stderr,"EM iteration %d/%d - logl = %1.1f\n", em_iteration, rfmix_opts.em_iterations,
-	    logl);
-  }
 
   /* No output if em_iteration == -1 and we are in the internal simulation
      phase. Otherwise, update the output every EM iteration. If the user
@@ -246,7 +246,12 @@ static double do_iteration(input_t *input, double crf_weight) {
     fb_output(input);
     fb_stay_in_state_output(input);
     output_Q(input);
-   }
+  }
+  if (em_iteration > 0) {
+    fprintf(stderr,"\n");
+    fprintf(stderr,"EM iteration %d/%d - logl = %1.1f (%+1.1f)\n", em_iteration,
+	    rfmix_opts.em_iterations, logl, logl - last_logl);
+  }
 
   return logl;
 }
@@ -323,7 +328,7 @@ int main(int argc, char *argv[]) {
   /* at em_iteration 0 and above, simulation samples are ignored and the 
      simulation parents are returned to the reference */
   em_iteration = 0;
-  logl = do_iteration(rfmix_input, crf_weight);
+  logl = do_iteration(rfmix_input, crf_weight, 0);
   fprintf(stderr,"Initial analysis - logl %1.1f\n", logl);
 
   /* at em_iteration 1 and above, query samples with their present ancestry
@@ -334,7 +339,7 @@ int main(int argc, char *argv[]) {
     em_iteration = i + 1;
     last_logl = logl;
 
-    logl = do_iteration(rfmix_input, crf_weight);
+    logl = do_iteration(rfmix_input, crf_weight, last_logl);
     if (i > 0 && logl - last_logl < 0.1) {
       fprintf(stderr,"EM converges at iteration %d\n", em_iteration);
       break;

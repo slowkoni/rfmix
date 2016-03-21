@@ -43,7 +43,7 @@ typedef struct {
   int sample_idx;
   int *haplotype[4];
   double *est_p[4];
-  double *current_p[4];
+  //double *current_p[4];
 } wsample_t;
 
 typedef struct {
@@ -243,7 +243,7 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
   
   /* Terminate recursion if there is only 1 reference haplotype left, no snps left
      to divide on, or the information content is less than half a bit per haplotype */
-  if (n_snps == 0 || n_ref <= 1) {
+  if (n_snps == 0 || n_ref <= 1 || level >= 20) {
 #ifndef DEBUG_L1
     assert(n_ref != 0);
 #endif
@@ -312,7 +312,8 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
       best_si[0] = child_si[0];
       best_si[1] = child_si[1];
       best_split = split_information;      
-    } else if (child_n[0] <= rfmix_opts.node_size || child_n[1] <= rfmix_opts.node_size) {
+    } else if (child_n[0] <= rfmix_opts.node_size || child_n[1] <= rfmix_opts.node_size ||
+	       (fabs(child_n[0] - n_ref) < 0.1 && fabs(child_n[1] - n_ref) < 0.1)) {
       snp_q[i] = snp_q[n_snps-1];
       snp_q[n_snps-1] = snp;
       n_snps--;
@@ -558,11 +559,7 @@ static void evaluate_sample(wsample_t *wsample, window_t *window, tree_t **trees
       evaluate_tree(p, &d, wsample->haplotype[h], trees[t]->root, window->n_subpops);
       
       for(int k=0; k < window->n_subpops; k++) {
-	if (p[k] > wsample->current_p[h][k]) {
-	  wsample->est_p[h][k] += (p[k] - wsample->current_p[h][k])/(double) d;
-	} else {
 	  wsample->est_p[h][k] += p[k]/(double) d;
-	}
       }
     }
 
@@ -606,10 +603,10 @@ static void setup_query_sample(wsample_t *wsample, sample_t *sample, int n_subpo
   }
   
   for(int j=0; j < 4; j++) {
-    wsample->current_p[j] = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
+    //    wsample->current_p[j] = (double *) ma->allocate(sizeof(double)*n_subpops, WHEREFROM);
     for(k=0; k < n_subpops; k++) {
       wsample->est_p[j][k] = 0.0;
-      wsample->current_p[j][k] = DF16(sample->current_p[j & 0x1][k]);
+      //      wsample->current_p[j][k] = DF16(sample->current_p[j & 0x1][k]);
     }
   }
 }
@@ -635,10 +632,9 @@ static void setup_ref_haplotypes(window_t *w, input_t *input, int start_snp, int
     /* Do not include the parents for the internal control simulation during
        learning for an optimum CRF weight */
     if (em_iteration == -1 && samples[i].s_parent == 1) continue;
-    
-    /* After learning the optimum weight, make sure not to use a simulation sample
-       in building the random forest. */
-    if (em_iteration != -1 && samples[i].s_sample == 1) continue;
+
+    /* Never use an internally simulated sample as a reference sample */
+    if (samples[i].s_sample == 1) continue;
 
     /* In the initial, non simulation control iteration, we have no estimates for
        ancestry on the query individuals, so skip them */
@@ -682,6 +678,8 @@ static void setup_ref_haplotypes(window_t *w, input_t *input, int start_snp, int
     }
   }
 
+  delete[] p_tmp;
+  
   int **subpop_rh_list = (int **) ma->allocate(sizeof(int *)*n_subpops, WHEREFROM);
   int c[n_subpops];
   for(k=0; k < n_subpops; k++) {
@@ -711,9 +709,11 @@ static void *random_forest_thread(void *targ) {
   
   window.n_query_samples = 0;
   for(i=0; i < input->n_samples; i++) {
-    if ((rfmix_opts.em_iterations > 0 && rfmix_opts.reanalyze_reference)
-	|| input->samples[i].apriori_subpop == -1)
-      window.n_query_samples++;
+    if (rfmix_opts.reanalyze_reference == 0 && input->samples[i].apriori_subpop >= 0) continue;
+    if (em_iteration == -1 && input->samples[i].s_sample != 1) continue;
+    if (em_iteration != -1 && input->samples[i].s_sample == 1) continue;
+    
+    window.n_query_samples++;
   }
 
   /* This memory allocation will not need to be done and redone with every window.
@@ -758,13 +758,14 @@ static void *random_forest_thread(void *targ) {
 #endif
       int q = 0;
       for(i=0; i < input->n_samples; i++) {
-	if ((rfmix_opts.em_iterations > 0 && rfmix_opts.reanalyze_reference)
-	    || input->samples[i].apriori_subpop == -1) {
-	  window.query_samples[q].sample_idx = i;
-	  setup_query_sample(window.query_samples + q, input->samples + i, n_subpops,
-			     crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
-	  q++;
-	}
+	if (rfmix_opts.reanalyze_reference == 0 && input->samples[i].apriori_subpop >= 0) continue;
+	if (em_iteration == -1 && input->samples[i].s_sample != 1) continue;
+	if (em_iteration != -1 && input->samples[i].s_sample == 1) continue;
+	
+	window.query_samples[q].sample_idx = i;
+	setup_query_sample(window.query_samples + q, input->samples + i, n_subpops,
+			   crf->rf_start_idx, crf->rf_end_idx, crf->snp_idx, ma);
+	q++;
       }
       setup_ref_haplotypes(&window, input, crf->rf_start_idx, crf->rf_end_idx, ma);
 
@@ -794,15 +795,6 @@ static void *random_forest_thread(void *targ) {
 	  for(int k=0; k < n_subpops; k++) {
 	    double p = wsample->est_p[j][k];
 	    input->samples[wsample->sample_idx].est_p[j][ IDX(w,k) ] = ef16(p);
-	    /* Must be careful to not cause underflow or overflow of int8_t floating point encoding.
-	       Note this also takes care of problems with 0s or 1s */
-	    /*	    if (p <= min_ef8_val) {
-	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) -127;
-	    } else if (p >= max_ef8_val) {
-	      input->samples[wsample->sample_idx].est_p[j][w][k] = (int8_t) 127;
-	    } else {
-	      input->samples[wsample->sample_idx].est_p[j][w][k] = EF8(p);
-	      }*/
 	  }
 	}
       }

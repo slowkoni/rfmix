@@ -55,6 +55,7 @@ static int8_t get_allele(char q) {
   case '1':
     return 1;
   case '.':
+    return 2;
   default:
     return 2;
   }
@@ -94,10 +95,18 @@ static void load_samples(input_t *input) {
 	
     samples[n_samples].sample_id = strdup(sample_id);
     samples[n_samples].apriori_subpop = -1;
+    samples[n_samples].s_parent = 0;
+    samples[n_samples].s_sample = 0;
 
+    if (sample_hash->lookup(sample_id) != NULL) {
+      fprintf(stderr,"Error: Sample id %s occurs twice or more in input - samples must have unique identifiers both within and across query and reference\n", sample_id);
+      exit(-1);
+    }
+    
     MA(tmp, sizeof(int), int);
     *tmp = n_samples;
     sample_hash->insert(sample_id, tmp);
+    
     n_samples++;
   }
   delete qvcf; 
@@ -208,6 +217,10 @@ static void load_samples(input_t *input) {
     samples[n_samples].sample_id = strdup(sample_id);
     samples[n_samples].apriori_subpop = ref_idx;
 
+    if (sample_hash->lookup(sample_id) != NULL) {
+      fprintf(stderr,"Error: Sample id %s occurs twice or more in input - samples must have unique identifiers both within and across query and reference\n", sample_id);
+      exit(-1);
+    }
     MA(tmp, sizeof(int), int);
     *tmp = n_samples;
     sample_hash->insert(sample_id, tmp);
@@ -217,6 +230,8 @@ static void load_samples(input_t *input) {
   
   /* initialize to empty/null values all other sample struct fields */
   for(i=0; i < n_samples; i++) {
+    samples[i].s_sample = 0;
+    samples[i].s_parent = 0;
     samples[i].haplotype[0] = NULL;
     samples[i].haplotype[1] = NULL;
     samples[i].current_p[0] = NULL;
@@ -238,8 +253,6 @@ static void load_samples(input_t *input) {
     samples[i].ksp[0] = NULL;
     samples[i].ksp[1] = NULL;
   }
-  samples[i].s_sample = 0;
-  samples[i].s_parent = 0;
   
   /* All work of this function is stored into the input_t struct and made available
      essentially everywhere through that */
@@ -459,6 +472,7 @@ static void parse_alleles(input_t *input, Inputline *vcf, vcf_column_map_t *colu
   int pos;
 
   int snp_idx = 0;
+  int n_unphased = 0;
   while(snp_idx < input->n_snps &&
 	(p = get_next_snp(vcf, &chm, &pos)) != NULL &&
 	strcmp(chm, rfmix_opts.chromosome) == 0) {
@@ -478,14 +492,17 @@ static void parse_alleles(input_t *input, Inputline *vcf, vcf_column_map_t *colu
 	exit(-1);
       }
       if (q[1] != '|' && q[0] != '.' && q[2] != '.') {
-	fprintf(stderr,"Warning: unphased genotype detected on line %d of %s\n",
-		vcf->line_no, vcf->fname);
+	n_unphased++;
       }
       sample->haplotype[0][snp_idx] = get_allele(q[0]);
       sample->haplotype[1][snp_idx] = get_allele(q[2]);
       col_idx++;
     }
     snp_idx++;
+  }
+
+  if (n_unphased > 0) {
+    fprintf(stderr,"\nWarning: %s - %d unphased genotypes treated as phased\n", vcf->fname, n_unphased);
   }
 }
 
@@ -564,7 +581,7 @@ static void layout_random_forest(crf_window_t *crf, int n_crf, snp_t *snps, int 
       rf_start = crf[w].snp_idx - rf_spacing / 2;
       if (rf_start < 0) rf_start = 0;
       rf_end = crf[w].snp_idx + rf_spacing / 2;
-      if (rf_end >= n_snps) rf_end = n_snps;
+      if (rf_end >= n_snps) rf_end = n_snps - 1;
 
       if (w > 0 && rf_start > crf[w-1].rf_end_idx + 1) rf_start = crf[w-1].rf_end_idx + 1;
       /*      while((rf_start > 0 || rf_end < n_snps - 1) && rf_end - rf_start < rf_spacing) {
@@ -719,7 +736,22 @@ input_t *load_input(void) {
   fprintf(stderr,"Defining and initializing conditional random field...  ");
   set_crf_points(input);
   fprintf(stderr,"Defining and initializing conditional random field...   done\n");
-  
+
+  int64_t n_variant = 0;
+  int64_t n_missing = 0;
+  for(int i=0; i < input->n_samples; i++) {
+    for(int h=0; h < 2; h++) {
+      for(int s=0; s < input->n_snps; s++) {
+	if (input->samples[i].haplotype[h][s] == 1) n_variant++;
+	if (input->samples[i].haplotype[h][s] == 2) n_missing++;
+      }
+    }
+  }
+
+  fprintf(stderr,"%ld (%1.1f%%) variant alleles\t%ld (%1.1f%%) missing alleles\n",
+	  n_variant, n_variant/((double) input->n_snps*2*input->n_samples)*100.,
+	  n_missing, n_missing/((double) input->n_snps*2*input->n_samples)*100.);
+
   return input;
 }
 
@@ -737,11 +769,14 @@ void free_input(input_t *input) {
     for(int h = 0; h < 2; h++) {
       free(sample->haplotype[h]);
       free(sample->current_p[h]);
+      if (sample->ksp[h]) free(sample->ksp[h]);
+      if (sample->sis_p[h]) free(sample->sis_p[h]);
     }
 
-    for(int h=0; h < 4; h++)
+    for(int h=0; h < 4; h++) {
        free(sample->est_p[h]);
-    
+       free(sample->msp[h]);
+    }   
 
     int *tmp = (int *) input->sample_hash->lookup(sample->sample_id);
     free(tmp);

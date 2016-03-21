@@ -89,24 +89,25 @@ void *mm::allocate(int size, WHEREARGS) {
    function. After several calls, if being used again and again in the same 
    loop context, this function will simply reset pointers and not call free() */
 void mm::recycle() {
-  int __attribute__((unused))i, __attribute__((unused))new_blocksize;
+  int __attribute__((unused))i;
+  size_t __attribute__((unused))new_blocksize;
 
   /* if more than one block was allocated in last usage, increase the
      blocksize so that a single block would have been enough */
-#if 0
+#if 1
   if (n_blocks > 1) {
     new_blocksize = block_size * n_blocks;
-    fprintf(stderr,"Set new blocksize to %1.1f Mb\n", new_blocksize/(double) (1024*1024));
+    //fprintf(stderr,"Set new blocksize to %1.1f Mb\n", new_blocksize/(double) (1024*1024));
     /* don't allow a blocksize increment to bring it over 16 Mb. Otherwise,
        make sure the new_blocksize is a multiple of the system pagesize */
-    if (new_blocksize > 16*1024*1024) {
-      new_blocksize = 16*1024*1024;
+    if (new_blocksize > 64*1024*1024) {
+      new_blocksize = 64*1024*1024;
     } else {
       new_blocksize = (new_blocksize | (getpagesize()-1)) + 1;
     }
-    fprintf(stderr,"Set new blocksize to %1.1f Mb\n", new_blocksize/(double) (1024*1024));
+    //fprintf(stderr,"Set new blocksize to %1.1f Mb\n", new_blocksize/(double) (1024*1024));
 
-    if (new_blocksize > block_size) {
+    if (n_blocks > 1) {
       for(i=1;i<n_blocks;i++) free(blocks[i]);
       
       RA(blocks[0], sizeof(char)*new_blocksize, char);
