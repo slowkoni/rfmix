@@ -15,7 +15,9 @@
 #include <string.h>
 #include <errno.h>
 
+#include <unistd.h>
 #include <stdint.h>
+#include <limits.h>
 
 #include "kmacros.h"
 #include "cmdline-utils.h"
@@ -32,6 +34,7 @@ typedef struct {
   int n_generations;
   int ril;
   double growth_rate;
+  int max_popsize;
   char *random_seed_str;
   int32_t random_seed;
 } opts_t;
@@ -49,6 +52,8 @@ static option_t options[] = {
     "Basename (prefix) for output files (required)" },
   { 0, "growth-rate", &opts.growth_rate, OPT_DBL, 0, 1,
     "Growth rate of population per generation (1 = no growth, 1.5 = 50% increase per generation, etc.)" },
+  { 's', "maximum-size", &opts.max_popsize, OPT_INT, 0, 1,
+    "Stop growing population when it reaches specified size" },
   
   { 'c', "chromosome", &opts.chromosome, OPT_STR, 1, 1,
     "Chromosome to select from the VCF file" },
@@ -70,7 +75,7 @@ static void init_options(void) {
   opts.genetic_fname = NULL;
   opts.output_basename = NULL;
   opts.growth_rate = 1.0;
-  
+  opts.max_popsize = INT_MAX;
   opts.chromosome = NULL;
   opts.n_generations = 8;
   opts.ril = 0;
@@ -175,7 +180,6 @@ int main(int argc, char *argv[]) {
 
   fprintf(stderr,"\nLoading VCF %s chromosome %s ... ", opts.vcf_fname, opts.chromosome);
   VCF *vcf = new VCF(opts.vcf_fname, opts.chromosome);
-  
   load_sample_subpop_map(opts.sample_map_fname);
 
   GeneticMap *genetic_map = new GeneticMap();
@@ -192,10 +196,18 @@ int main(int argc, char *argv[]) {
       parents[n_samples++] = new S_Sample(vcf->samples[i].sample_id, s->idx, vcf->snps, vcf->n_snps,
 					vcf->samples[i].haplotype[0], vcf->samples[i].haplotype[1]);
   }
-
+  fprintf(stderr,"\nChromosome %s loaded - %d SNPs, %d samples\n", opts.chromosome, vcf->n_snps, n_samples);
+  vcf->DropHaplotypes();
+  
   int last_size = n_samples;
   for(int g=0; g < opts.n_generations; g++) {
     int next_size = last_size * opts.growth_rate;
+    if (next_size > opts.max_popsize) next_size = opts.max_popsize;
+    if (isatty(2)) {
+      fprintf(stderr,"\rBreeding generation %4d/%4d (%1.1f%%) - %6d diploid individuals     ",
+	      g+1, opts.n_generations, (g+1)/(double) opts.n_generations * 100., next_size);
+    }
+
     int i;
     int *s = new int[last_size];
     for(i=0; i < last_size; i++)
@@ -232,8 +244,9 @@ int main(int argc, char *argv[]) {
     last_size = next_size;
     parents = children;
   }
-  fprintf(stderr,"Final simulated population size is %d diploid individuals\n", last_size);
-  
+  fprintf(stderr,"done.\nFinal simulated population size is %d diploid individuals\n", last_size);
+
+  fprintf(stderr,"Writing output... ");
   char vcf_out_fname[strlen(opts.output_basename) + strlen(".query.vcf") + 1];
   sprintf(vcf_out_fname,"%s.query.vcf", opts.output_basename);
   char result_fname[strlen(opts.output_basename) + strlen(".result") + 1];
@@ -262,22 +275,69 @@ int main(int argc, char *argv[]) {
   }
   fprintf(vf,"\n");
   fprintf(rf,"\n");
-  
-  for(int i=0; i < vcf->n_snps; i++) {
+
+  int i;
+  for(i=0; i < vcf->n_snps; i++) {
+    if (((i & 0xFFF) == 0) && isatty(2)) {
+      fprintf(stderr,"\rWriting output...  %11d/%11d (%1.1f%%) SNPs     ", i, vcf->n_snps,
+	      i/(double) vcf->n_snps * 100.);
+    }
     fprintf(vf,"%s\t%d\t%s\t%s\t%s\t100\tPASS\t.\tGT", opts.chromosome, vcf->snps[i].pos,
 	    vcf->snps[i].snp_id, vcf->snps[i].ref, vcf->snps[i].alt);
     fprintf(rf,"%s\t%d", opts.chromosome, vcf->snps[i].pos);
-    
+
     for(int j=0; j < last_size; j++) {
-      fprintf(vf,"\t%d|%d", parents[j]->haplotype[0][i], parents[j]->haplotype[1][i]);
-      fprintf(rf,"\t%d\t%d", parents[j]->subpop[0][i] + 1, parents[j]->subpop[1][i] + 1);
+      fputc('\t',vf);
+      switch(parents[j]->haplotype[0][i]*3 + parents[j]->haplotype[1][i]) {
+      case 0:
+	fputc('0',vf);
+	fputc('|',vf);
+	fputc('0',vf);
+	break;
+      case 1:
+	fputc('0',vf);
+	fputc('|',vf);
+	fputc('1',vf);
+	break;
+      case 3:
+	fputc('1',vf);
+	fputc('|',vf);
+	fputc('0',vf);
+	break;
+      case 4:
+	fputc('1',vf);
+	fputc('|',vf);
+	fputc('1',vf);
+	break;
+      default:
+	fputc('.',vf);
+	fputc('/',vf);
+	fputc('.',vf);
+	break;
+      }
+      //      fprintf(vf,"\t%d|%d", parents[j]->haplotype[0][i], parents[j]->haplotype[1][i]);
+      fputc('\t',rf);
+      fputc(parents[j]->subpop[0][i] + '1', rf);
+      fputc('\t',rf);
+      fputc(parents[j]->subpop[1][i] + '1', rf);
+      //      fprintf(rf,"\t%d\t%d", parents[j]->subpop[0][i] + 1, parents[j]->subpop[1][i] + 1);
     }
     fprintf(vf,"\n");
     fprintf(rf,"\n");
   }
+  if (isatty(2))
+    fprintf(stderr,"\r");
+  else
+    fprintf(stderr,"\n");
+  fprintf(stderr,"Writing output...  %11d/%11d (%1.1f) SNPs     done.\n", i, vcf->n_snps,
+	  i/(double) vcf->n_snps * 100.);
   
   fclose(vf);
   fclose(rf);
+
+  delete[] parents;
+  delete vcf;
+  delete genetic_map;
   return 0;
 }
 

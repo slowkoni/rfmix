@@ -46,7 +46,8 @@ class VCF {
   void load_snps(char *chromosome, GeneticMap *genetic_map);
   int8_t *get_haplotype(char *sample_id);
   void load_haplotypes(char *chromosome);
-
+  void DropHaplotypes(void);
+  
   sample_t *samples;
   int n_samples;
 

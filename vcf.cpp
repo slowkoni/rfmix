@@ -212,14 +212,30 @@ VCF::VCF(char *vcf_fname, char *chm) {
   parse_samples(sample_line);
 }
 
+void VCF::DropHaplotypes(void) {
+  for(int i=0; i < n_samples; i++) {
+    if (samples[i].haplotype[0]) free(samples[i].haplotype[0]);
+    if (samples[i].haplotype[1]) free(samples[i].haplotype[1]);
+    samples[i].haplotype[0] = NULL;
+    samples[i].haplotype[1] = NULL;
+  }
+}
+
 VCF::~VCF(void) {
   if (sample_map) delete sample_map;
   if (samples) {
-    for(int i=0; i < n_samples; i++)
+    for(int i=0; i < n_samples; i++) {
       free(samples[i].sample_id);
+      if (samples[i].haplotype[0]) free(samples[i].haplotype[0]);
+      if (samples[i].haplotype[1]) free(samples[i].haplotype[1]);
+    }
     free(samples);
   }
   n_samples = 0;
+  /*  for(int i=0; i < n_alleles; i++) {
+    free(alleles[i]);
+  }
+  free(alleles);*/
   
   if (column_map) free(column_map);
   n_columns = 0;
