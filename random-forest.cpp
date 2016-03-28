@@ -147,7 +147,7 @@ static void __attribute__((unused))output_tree(FILE *f, tree_t *tree) {
   fprintf(f,"\n\n");
 }
 
-static void add_current_p(double *p, double *current_p, int n) {
+static inline void add_current_p(double *p, double *current_p, int n) {
   for(int k=0; k < n; k++) p[k] += current_p[k];
 }
 
@@ -234,7 +234,7 @@ static double evaluate_snp(double *si, double *n_child, tree_t *tree, int snp, i
   return (si[0] + si[1])/(n_child[0] + n_child[1]);
 }
 
-static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_ref,
+static node_t* add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_ref,
 			double si, mm *ma, int level) {
 
   node_t *node = (node_t *) ma->allocate(sizeof(node_t), WHEREFROM);
@@ -278,8 +278,8 @@ static node_t *add_node(tree_t *tree, int *snp_q, int n_snps, int *ref_q, int n_
      to 1/sqrt(2) of those SNPs remaining. This was a parameter of the original program
      but is currently fixed here. All SNPs should not be evaluated, or the only randomness
      in the tree is due to bootstrap selection of haplotypes */
-  int n_try = (int) (n_snps * M_SQRT1_2);
-  if (n_try < 10) n_try = n_snps;
+  int n_try = (int) n_snps/2.;//(n_snps * M_SQRT1_2);
+  //if (n_try < 10) n_try = n_snps;
 
   /* Randomly permute the array of SNPs, then evaluate the first n_try of them. The random
      number generator is key'd to the window index for repeatability of runs on the same
