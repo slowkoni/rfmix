@@ -37,6 +37,7 @@ typedef struct {
   int max_popsize;
   char *random_seed_str;
   int32_t random_seed;
+  double phase_switch_rate;
 } opts_t;
 
 opts_t opts;
@@ -61,6 +62,8 @@ static option_t options[] = {
     "Number of generations to simulate random mating admixture" },
   {  0 , "make-rils", &opts.ril, OPT_FLAG, 0, 0,
      "After first generation of random mating, make recombinant inbred lines by selfing" },
+  { 'p', "phasing-switch", &opts.phase_switch_rate, OPT_DBL, 0, 1,
+    "introduce phasing switches at this rate. verification data is not switched" },
   
   { 0, "random-seed", &opts.random_seed_str, OPT_STR, 0, 1,
     "Seed value for random number generation - integer value (maybe specified in"
@@ -80,6 +83,7 @@ static void init_options(void) {
   opts.n_generations = 8;
   opts.ril = 0;
   opts.random_seed_str = (char *) "0xDEADBEEF";
+  opts.phase_switch_rate = 0.0;
 }
 
 static void verify_options(void) {
@@ -105,7 +109,11 @@ static void verify_options(void) {
     fprintf(stderr,"\nSpecify chromosome to select from VCF input with -c option\n\n");
     exit(-1);
   }
-
+  if (opts.phase_switch_rate < 0. || opts.phase_switch_rate > 1.0) {
+    fprintf(stderr,"\nPhasing switch rate (-p) must be between 0 and 1\n\n");
+    exit(-1);
+  }
+  
   if (strcmp(opts.random_seed_str, "clock") == 0) {
     opts.random_seed = time(NULL);
   } else {
@@ -263,6 +271,7 @@ int main(int argc, char *argv[]) {
     exit(-1);
   }
 
+  int phase_switched[last_size];
   fprintf(vf,"##fileformat=VCFv4.1\n");
   fprintf(vf,"##source=%s (rfmix v2)\n", argv[0]);
   fprintf(vf,"##FORMAT=<ID=GT,Number=1,Type=String,Descripton=\"Phased Genotype\">\n");
@@ -270,6 +279,7 @@ int main(int argc, char *argv[]) {
   fprintf(vf,"#CHROM\tPOS\tID\tREF\tVAR\tQUAL\tFILTER\tINFO\tFORMAT");
   fprintf(rf,"chm\tpos");
   for(int j=0; j < last_size; j++) {
+    phase_switched[j] = 0;
     fprintf(vf,"\t%s", parents[j]->sample_id);
     fprintf(rf,"\t%s.0\t%s.1", parents[j]->sample_id, parents[j]->sample_id);
   }
@@ -287,33 +297,18 @@ int main(int argc, char *argv[]) {
     fprintf(rf,"%s\t%d", opts.chromosome, vcf->snps[i].pos);
 
     for(int j=0; j < last_size; j++) {
+      if (rand()/(RAND_MAX + 1.0) < opts.phase_switch_rate) {
+	phase_switched[j] = phase_switched[j] ? 0 : 1;
+      }
+    }
+    for(int j=0; j < last_size; j++) {
       fputc('\t',vf);
-      switch(parents[j]->haplotype[0][i]*3 + parents[j]->haplotype[1][i]) {
-      case 0:
-	fputc('0',vf);
-	fputc('|',vf);
-	fputc('0',vf);
-	break;
-      case 1:
-	fputc('0',vf);
-	fputc('|',vf);
-	fputc('1',vf);
-	break;
-      case 3:
-	fputc('1',vf);
-	fputc('|',vf);
-	fputc('0',vf);
-	break;
-      case 4:
-	fputc('1',vf);
-	fputc('|',vf);
-	fputc('1',vf);
-	break;
-      default:
-	fputc('.',vf);
-	fputc('/',vf);
-	fputc('.',vf);
-	break;
+      if (phase_switched[j]) {
+	fprintf(vf,"%c|%c",parents[j]->haplotype[1][i] + '0',
+		parents[j]->haplotype[0][i] + '0');
+      } else {
+	fprintf(vf,"%c|%c",parents[j]->haplotype[0][i] + '0',
+		parents[j]->haplotype[1][i] + '0');
       }
       //      fprintf(vf,"\t%d|%d", parents[j]->haplotype[0][i], parents[j]->haplotype[1][i]);
       fputc('\t',rf);
