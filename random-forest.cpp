@@ -106,7 +106,7 @@ typedef struct {
   int **haplotypes;
   int n_haplotypes;
   double **current_p;
-  
+
   node_t *root;
 } tree_t;
 

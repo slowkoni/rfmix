@@ -75,6 +75,8 @@ static option_t options[] = {
     "Physical position range, specified as <start pos>-<end pos>, in Mbp (decimal allowed)\n" },
   
   /* Runtime execution control options (only specifies how the program runs)*/
+  { 0, "debug", &rfmix_opts.debug, OPT_FLAG, 0, 1,
+    "Turn on any debugging output" },
   { 0, "n-threads", &rfmix_opts.n_threads, OPT_INT, 0, 1,
     "Force number of simultaneous thread for parallel execution" },
   { 0, "random-seed", &rfmix_opts.random_seed_str, OPT_STR, 0, 1,
@@ -106,6 +108,7 @@ static void init_options(void) {
   rfmix_opts.crf_weight = -1.0;
   rfmix_opts.reanalyze_reference = 0;
   
+  rfmix_opts.debug = 0;
   rfmix_opts.n_threads = sysconf(_SC_NPROCESSORS_CONF);
   rfmix_opts.chromosome = (char *) "";
   rfmix_opts.random_seed_str = (char *) "0xDEADBEEF";
@@ -203,8 +206,6 @@ static void verify_options(void) {
     }
     free(p);
   }
-  if (rfmix_opts.crf_weight <= 0.0)
-    rfmix_opts.crf_weight = 2.0*rfmix_opts.rf_window_size/rfmix_opts.crf_spacing;
   
   if (rfmix_opts.n_threads < 1) rfmix_opts.n_threads = 1;
   if (strcmp(rfmix_opts.chromosome,"") == 0) {
@@ -321,9 +322,11 @@ int main(int argc, char *argv[]) {
   fprintf(stderr,"\n");
 
   /* em_iteration at -1 tells random forest to hold out the simulation parents
-     from the reference and crf to only analyze the simulation samples */
+     from the reference and crf to only analyze the simulation samples. This is
+     skipped if a weight parameter was set on the command line */
   em_iteration = -1;
-  crf_weight = find_optimal_crf_weight(rfmix_input);
+  if (rfmix_opts.crf_weight <= 0)
+    crf_weight = find_optimal_crf_weight(rfmix_input);
 
   /* at em_iteration 0 and above, simulation samples are ignored and the 
      simulation parents are returned to the reference */

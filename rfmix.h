@@ -90,7 +90,8 @@ typedef struct {
   int analyze_range[2];
   char *analyze_str;
   double crf_weight;
-  
+
+  int debug;
   int n_threads;
   char *chromosome;
   char *random_seed_str;
