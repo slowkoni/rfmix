@@ -6,7 +6,7 @@ RFMIX is a program to identify the ancestry of genomic segments using random for
 
 ### LICENSE
 
-RFMIX v2.XX is available for use without fee for academic research use only. For users wishing to use RFMIX for commercial purposes, explicit licenses may be granted for such use. Please contact cdbadmin@stanford.edu for more information.
+RFMIX v2.XX is available for use without fee for academic research use only. For users wishing to use RFMIX for commercial purposes, explicit licenses may be granted for such use. Please contact [Stanford Office of Technology Licensing](http://otl.stanford.edu/) for more information.
 
 ### Requirements
 
