@@ -118,7 +118,7 @@ void msp_output(input_t *input) {
 static void fb_output_haplotype(FILE *f, int16_t *p, int n) {
   fprintf(f,"%1.5f",DF16(p[0]));
   for(int k=1; k < n; k++)
-    fprintf(f," %1.5f",DF16(p[k]));
+    fprintf(f,"\t%1.5f",DF16(p[k]));
 }
 
 #define FB_EXTENSION ".fb.tsv"
@@ -135,17 +135,24 @@ void fb_output(input_t *input) {
   }
   
   fprintf(f,"#");
-  fprintf(f,"Subpopulation order: %s", input->reference_subpops[0]);
+  fprintf(f,"Subpopulation_order:\t%s", input->reference_subpops[0]);
   for(int i=1; i < input->n_subpops; i++) {
     fprintf(f,"\t%s", input->reference_subpops[i]);
   }
   fprintf(f,"\n");
-  fprintf(f,"#chm\tpos\tgpos\tsnp idx");
+  fprintf(f,"chromosome\tphysical_pos_in_bp\tgenetic_position_in_cm\tgenetic_marker_index");
   for(int j=0; j < input->n_samples; j++) {
     sample_t *sample = input->samples + j;
     if (sample->apriori_subpop != -1 || sample->s_sample == 1) continue;
 
-    fprintf(f,"\t%s.0\t%s.1", sample->sample_id, sample->sample_id);
+    for(int k=0; k < input->n_subpops; k++) {
+      fprintf(f, "\t%s:::hap1:::%s", sample->sample_id, input->reference_subpops[k]);
+    }
+    for(int k=0; k < input->n_subpops; k++) {
+      fprintf(f, "\t%s:::hap2:::%s", sample->sample_id, input->reference_subpops[k]);
+    }
+
+    // fprintf(f,"\t%s.0\t%s.1", sample->sample_id, sample->sample_id);
   }
   fprintf(f,"\n");
 
