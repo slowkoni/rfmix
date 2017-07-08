@@ -47,7 +47,7 @@ The sample map file specifies which subpopulation each reference sample represen
 
 RFMix assigns probabilities that a chunk of the genome, referred to as a
 conditional random field (CRF) point, is derived from an ancestral
-population (eg. reference panel breed).
+population (ie. reference panel population).
 
 RFMIX upon completion will output two main files of interest: the most likely assignment of subpopulations per CRF point (\<output basename\>.msp.tsv), and the marginal probabilities of each subpopulation being the ancestral population of the corresponding CRF point (\<output basename\>.fb.tsv). The latter is produced by computing the forward-backward algorithm on the CRF, and the former by using the Viterbi algorithm. The .msp.tsv file is condensed such that CRF windows are combined if all query samples are in the sample subpopulations for successive windows. Thus, each line might represent several CRF points.
 
