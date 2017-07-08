@@ -1,0 +1,10 @@
+*_STORE # mac os x files
+*.DS_Store # alternate
+*.swp #  vi temp files
+*.o # not human readable
+*.a # not human readable
+*.pyc # not human readable
+*.viminfo
+*.sublime-workspace
+*.sublime-project
+temp/*
