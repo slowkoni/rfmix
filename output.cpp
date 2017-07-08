@@ -122,20 +122,15 @@ static void fb_output_haplotype(FILE *f, int16_t *p, int n) {
 
 #define FB_EXTENSION ".fb.tsv"
 void fb_output(input_t *input) {
-// the output is the tab separated file \<output basename\>.fb.tsv
-
+// the output is a tab separated file with the name \<output basename\>.fb.tsv
+//
 // The first line is a comment line, that specifies the order of subpopulations:
 // eg:
-
 //   #reference_panel_population: golden_retriever  labrador_retriever  poodle  poodle_small
-
 // The second line specifies the column names, and every following lines gives data on a chunk of the genome, called a conditional random field (CRF) point.
-
 // The first few columns specifies the chromosome, genetic marker's physical position in basepair units and genetic position in centiMorgans, and the genetic marker's numerical index in the rfmix genetic map input file. The remaining columns give the probabilities that the CRF point for a genotype's haplotype was assigned to a specific reference panel population. A genotype has two haplotypes, so the number of probabilities for a genotype is 2*(number of reference panel populations). The number of columns in the file is 4 + (number of genotypes) * 2 * (number of reference panel populations.
-
-// For example, for a rfmix run with 2 admixed genotype_ids run against 3 reference panel populations, the columns would be::
-
-
+//
+// For example, for a rfmix run with 2 admixed genotype_ids run against 3 reference panel populations, the columns would be:
 //   chromosome physical_position genetic_position genetic_marker_index 
 //   genotype_id1:::hap1:::subpop1:::probability
 //   genotype_id1:::hap1:::subpop2:::probability

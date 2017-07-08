@@ -45,7 +45,7 @@ The sample map file specifies which subpopulation each reference sample represen
 
 ### Output files
 
-RFMix assigns probabilities that a chunk of the genome, referred to as
+RFMix assigns probabilities that a chunk of the genome, referred to as a
 conditional random field (CRF) point, is derived from an ancestral
 population (eg. reference panel breed).
 
@@ -53,7 +53,7 @@ RFMIX upon completion will output two main files of interest: the most likely as
 
 The .msp.tsv file output file is tab separated values forming a matrix with rows corresponding to genomic position and columns corresponding to haplotypes. The file include column headers and leading columns that indicate the position or range covered for each row.
 
-For the forward-backward results, the output is the tab separated file \<output basename\>.fb.tsv
+For the forward-backward results, the output is a tab separated file with the name \<output basename\>.fb.tsv
 
 The first line is a comment line, that specifies the order of subpopulations:
 eg:
@@ -63,9 +63,9 @@ eg:
 
 The second line specifies the column names, and every following lines gives data on a chunk of the genome, called a conditional random field (CRF) point.
 
-The first few columns specifies the chromosome, genetic marker's physical position in basepair units and genetic position in centiMorgans, and the genetic marker's numerical index in the rfmix genetic map input file. The remaining columns give the probabilities that the CRF point for a genotype's haplotype was assigned to a specific reference panel population. A genotype has two haplotypes, so the number of probabilities for a genotype is 2*(number of reference panel populations). The number of columns in the file is 4 + (number of genotypes) * 2 * (number of reference panel populations.
+The first four columns specify the chromosome, genetic marker's physical position in basepair units and genetic position in centiMorgans, and the genetic marker's numerical index in the rfmix genetic map input file. The remaining columns give the probabilities that the CRF point for a genotype's haplotype was assigned to a specific reference panel population. A genotype has two haplotypes, so the number of probabilities for a genotype is 2*(number of reference panel populations). The number of columns in the file is 4 + (number of genotypes) * 2 * (number of reference panel populations.
 
-For example, for a rfmix run with 2 admixed genotype_ids run against 3 reference panel populations, the columns would be::
+For example, for a rfmix run with 2 admixed genotype_ids run against 3 reference panel populations, the columns would be:
 
 ```
 chromosome physical_position genetic_position genetic_marker_index
