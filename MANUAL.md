@@ -45,43 +45,9 @@ The sample map file specifies which subpopulation each reference sample represen
 
 ### Output files
 
-RFMix assigns probabilities that a chunk of the genome, referred to as a
-conditional random field (CRF) point, is derived from an ancestral
-population (ie. reference panel population).
-
 RFMIX upon completion will output two main files of interest: the most likely assignment of subpopulations per CRF point (\<output basename\>.msp.tsv), and the marginal probabilities of each subpopulation being the ancestral population of the corresponding CRF point (\<output basename\>.fb.tsv). The latter is produced by computing the forward-backward algorithm on the CRF, and the former by using the Viterbi algorithm. The .msp.tsv file is condensed such that CRF windows are combined if all query samples are in the sample subpopulations for successive windows. Thus, each line might represent several CRF points.
 
-The .msp.tsv file output file is tab separated values forming a matrix with rows corresponding to genomic position and columns corresponding to haplotypes. The file include column headers and leading columns that indicate the position or range covered for each row.
-
-For the forward-backward results, the output is a tab separated file with the name \<output basename\>.fb.tsv
-
-The first line is a comment line, that specifies the order of subpopulations:
-eg:
-```
-#reference_panel_population: golden_retriever  labrador_retriever  poodle  poodle_small
-```
-
-The second line specifies the column names, and every following lines gives data on a chunk of the genome, called a conditional random field (CRF) point.
-
-The first four columns specify the chromosome, genetic marker's physical position in basepair units and genetic position in centiMorgans, and the genetic marker's numerical index in the rfmix genetic map input file. The remaining columns give the probabilities that the CRF point for a genotype's haplotype was assigned to a specific reference panel population. A genotype has two haplotypes, so the number of probabilities for a genotype is 2*(number of reference panel populations). The number of columns in the file is 4 + (number of genotypes) * 2 * (number of reference panel populations.
-
-For example, for a rfmix run with 2 admixed genotype_ids run against 3 reference panel populations, the columns would be:
-
-```
-chromosome physical_position genetic_position genetic_marker_index
-genotype_id1:::hap1:::subpop1:::probability
-genotype_id1:::hap1:::subpop2:::probability
-genotype_id1:::hap1:::subpop3:::probability
-genotype_id1:::hap2:::subpop1:::probability
-genotype_id1:::hap2:::subpop2:::probability
-genotype_id1:::hap2:::subpop3:::probability
-genotype_id2:::hap1:::subpop1:::probability
-genotype_id2:::hap1:::subpop2:::probability
-genotype_id2:::hap1:::subpop3:::probability
-genotype_id2:::hap2:::subpop1:::probability
-genotype_id2:::hap2:::subpop2:::probability
-genotype_id2:::hap2:::subpop3:::probability
-```
+Both output files are tab separated values forming a matrix with rows corresponding to genomic position and columns corresponding to haplotypes. The files include column headers and leading columns that indicate the position or range covered for each row. For the forward-backward results, haplotypes are tab delimited, but the array of probabilities for each haplotype at each window (row) is a set of space delimited columns within each tab delimited haplotype column. The order and names of the reference subpopulations are indicated in a header row.
 
 Global *diploid* ancestry estimates are computed by RFMIX and output to \<output basename\>.rfmix.Q, corresponding to the .Q output files of the global ancestry analysis programs *fastStructure* or *ADMIXTURE*. Please note that the ordering of subpopulations in columns for *fastStructure* or *ADMIXTURE* is not guaranteed to be the same as RFMIX and the ordering may change for different runs of those programs. RFMIX will always output in the same order (indicated in a header line) if the reference file used is the same. Additionally, RFMIX will add the sample name/id from the VCF input as a leading column.
 
