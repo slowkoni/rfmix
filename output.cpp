@@ -143,18 +143,18 @@ The first few columns specifies the chromosome, genetic marker's physical
 For example, for a rfmix run with 2 admixed genotype_ids run against 3 
 reference panel populations, the columns would be:
   chromosome physical_position genetic_position genetic_marker_index 
-  genotype_id1:::hap1:::subpop1:::probability
-  genotype_id1:::hap1:::subpop2:::probability
-  genotype_id1:::hap1:::subpop3:::probability
-  genotype_id1:::hap2:::subpop1:::probability
-  genotype_id1:::hap2:::subpop2:::probability
-  genotype_id1:::hap2:::subpop3:::probability
-  genotype_id2:::hap1:::subpop1:::probability
-  genotype_id2:::hap1:::subpop2:::probability
-  genotype_id2:::hap1:::subpop3:::probability
-  genotype_id2:::hap2:::subpop1:::probability
-  genotype_id2:::hap2:::subpop2:::probability
-  genotype_id2:::hap2:::subpop3:::probability
+  genotype_id1:::hap1:::subpop1
+  genotype_id1:::hap1:::subpop2
+  genotype_id1:::hap1:::subpop3
+  genotype_id1:::hap2:::subpop1
+  genotype_id1:::hap2:::subpop2
+  genotype_id1:::hap2:::subpop3
+  genotype_id2:::hap1:::subpop1
+  genotype_id2:::hap1:::subpop2
+  genotype_id2:::hap1:::subpop3
+  genotype_id2:::hap2:::subpop1
+  genotype_id2:::hap2:::subpop2
+  genotype_id2:::hap2:::subpop3
   */
 
   fprintf(stderr,"Outputing forward-backward results.... \n");
@@ -180,10 +180,10 @@ reference panel populations, the columns would be:
     if (sample->apriori_subpop != -1 || sample->s_sample == 1) continue;
 
     for(int k=0; k < input->n_subpops; k++) {
-      fprintf(f, "\t%s:::hap1:::%s:::probability", sample->sample_id, input->reference_subpops[k]);
+      fprintf(f, "\t%s:::hap1:::%s", sample->sample_id, input->reference_subpops[k]);
     }
     for(int k=0; k < input->n_subpops; k++) {
-      fprintf(f, "\t%s:::hap2:::%s:::probability", sample->sample_id, input->reference_subpops[k]);
+      fprintf(f, "\t%s:::hap2:::%s", sample->sample_id, input->reference_subpops[k]);
     }
 
   }
