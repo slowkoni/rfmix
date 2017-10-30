@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.62])
-AC_INIT([RFMIX], [v2.02-r1], mhwright@stanford.edu)
+AC_INIT([RFMIX], [v2.03-r0], markoni.wright@gmail.com)
 AC_CONFIG_SRCDIR([./rfmix.cpp])
 AM_INIT_AUTOMAKE
 

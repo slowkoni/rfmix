@@ -82,14 +82,41 @@ static int select_parents(S_Sample ***r_ssamples, sample_t *samples, int n_sampl
   return n_parents;  
 }
 
+static void compute_subpop_proportions(double *sp, S_Sample **samples, int n_samples,
+				      int n_subpops, int n_snps) {
+  int k;
+
+  for(k=0; k < n_subpops; k++)
+      sp[k] = 0.;
+
+  for(int i=0; i < n_samples; i++) {
+    for(int s=0; s < n_snps; s++) {
+      sp[samples[i]->subpop[0][s]]++;
+      sp[samples[i]->subpop[1][s]]++;
+    }
+  }
+
+  for(k=0; k < n_subpops;k++)
+    sp[k] = sp[k]/n_samples/n_snps/2.;
+}
+
 void generate_simulated_samples(input_t *input) {
   S_Sample **parents;
   S_Sample **children;
+  int repeat_generations = 0;
+  int warning_printed = 0;
+  double growth_rate;
+  double sp[input->n_subpops];
   int n_parents = select_parents(&parents, input->samples, input->n_samples, input->n_subpops,
 				 input->snps, input->n_snps);
 
+  compute_subpop_proportions(sp, parents, n_parents, input->n_subpops, input->n_snps);
+  double loss_limit = 1.0/(input->n_subpops+1);
+  for(int k=0; k < input->n_subpops; k++) {
+    if (sp[k] < loss_limit) loss_limit = sp[k];
+  }
+
   int n_start_parents = n_parents;
-  double growth_rate = SIM_GROWTH_RATE;
   int max_samples = input->n_subpops * SIM_SAMPLES_PER_SUBPOP;
   for(int g=0; g < rfmix_opts.n_generations; g++) {
     for(int i=0; i < n_parents; i++) {
@@ -99,19 +126,50 @@ void generate_simulated_samples(input_t *input) {
       parents[j] = tmp;
     }
 
-    int next_size = n_parents * growth_rate;
+    /* Double population size until we have at least 100 individuals, because we can easily
+       afford to and this will reduce potential for total loss due to drift in the early
+       generations when drift will have the most effect. Once up to 100 then increase
+       by the SIM_GROWTH_RATE constant as set in rfmix.h. Choice of 100 is somewhat arbitrary. */
+    growth_rate = n_parents < 100 ? 2.0 : SIM_GROWTH_RATE;
+    int next_size = (int) (n_parents * growth_rate + 0.5);
     if (next_size > max_samples) next_size = max_samples;
     children = new S_Sample*[next_size];
     for(int i=0; i < next_size; i++) {
       children[i] = new S_Sample(parents[i % n_parents], parents[(i+1) % n_parents]);
     }
 
-    for(int i=0; i < n_parents; i++)
-      delete parents[i];
-    delete[] parents;
+    /* Determine how much genetic material from each subpopulation is represented in
+       this new generation. If we are losing too much of one, redo this generation
+       (see below) */
+    compute_subpop_proportions(sp, children, next_size, input->n_subpops, input->n_snps);
 
-    parents = children;
-    n_parents = next_size;
+    int k;
+    for(k=0; k < input->n_subpops;k++) {
+      if (sp[k] < loss_limit) break;
+    }
+    
+    if (k < input->n_subpops) {
+      /* We are loosing too much of one or more populations due to genetic drift.
+	 Redo this generation. Since the random numbers will be different, different
+	 chromosomal segments will propogate to the next generation. */
+      for(int i=0; i < next_size; i++) {
+	delete children[i];
+      }
+      delete[] children;
+      g--;
+      repeat_generations++;
+      if (warning_printed == 0 && repeat_generations > 50) {
+	fprintf(stderr,"Warning: excessive genetic drift loss during simulated population generation. Reference panel is too unbalanced. Program may not exit simulation loop. \n");
+	warning_printed = 1;
+      }
+    } else {
+      for(int i=0; i < n_parents; i++)
+	delete parents[i];
+      delete[] parents;
+
+      parents = children;
+      n_parents = next_size;
+    }
   }
   fprintf(stderr,"\nInternally simulated %d samples from %d randomly selected reference parents.\n",
 	  n_parents, n_start_parents);

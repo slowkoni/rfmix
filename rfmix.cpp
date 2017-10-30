@@ -118,7 +118,7 @@ static void print_banner(void) {
   fprintf(stderr,
 "\n"
 "RFMIX %s - Local Ancestry and Admixture Inference\n"
-"(c) 2016 Mark Koni Hamilton Wright\n"
+"(c) 2016, 2017 Mark Koni Hamilton Wright\n"
 "Bustamante Lab - Stanford University School of Medicine\n"
 "Based on concepts developed in RFMIX v1 by Brian Keith Maples, et al.\n"
 "\n"
@@ -292,7 +292,7 @@ static double find_optimal_crf_weight(input_t *input) {
     /* Generally once we have climbed to a maximum, higher weights will not
        produce better results and the results will rapidly degrade. When that
        is definitely occurring, stop this process as we are just wasting time */
-    if (w > 2 && d < max_d / 2.) break;
+    if (w > 10 && d * 1.5 < max_d) break;
   }
   
   if (isatty(2)) fprintf(stderr,"\n");
@@ -325,9 +325,10 @@ int main(int argc, char *argv[]) {
      from the reference and crf to only analyze the simulation samples. This is
      skipped if a weight parameter was set on the command line */
   em_iteration = -1;
+  crf_weight = rfmix_opts.crf_weight;
   if (rfmix_opts.crf_weight <= 0)
     crf_weight = find_optimal_crf_weight(rfmix_input);
-
+  
   /* at em_iteration 0 and above, simulation samples are ignored and the 
      simulation parents are returned to the reference */
   em_iteration = 0;
