@@ -6,6 +6,12 @@ configure
 .deps/
 aclocal.m4
 autom4te.cache/
+*.DS_Store
+*.sublime-workspace
+*.sublime-project
+temp/*
+*.Po
+*.swp
 compile
 config.h
 config.h.in

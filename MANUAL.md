@@ -27,7 +27,7 @@ Run the program with no command line options to see a list of options accepted a
 The following options are required:
 
 ~~~~~~~~~~~~
-	-f <query VCF/BCF file> 
+	-f <query VCF/BCF file>
 	-r <reference VCF/BCF file>
 	-m <sample map file>
 	-g <genetic map file>
@@ -41,13 +41,13 @@ It is recommended that BCF files be used as input. The samples in the VCF/BCF fi
 
 The genetic map file is tab delimited text containing at least 3 columns. The first 3 columns are intepreted as chromosome, physical position in bp, genetic position in cM. Any number of columns or other information may follow, it is ignored. The chromosome column is a string token (which may be an string of digits) that must match those used in the VCF/BCF inputs. The genetic map file should contain the map for the entire genome (all chromosomes). Blank lines and lines beginning with a '#' are ignored.
 
-The sample map file specifies which subpopulation each reference sample represents. It is tab delimited text with at least two columns. The first column gives the sample name or identifier, which must match the one used in the reference VCF/BCF. The second column is a string naming a subpopulation and may contain spaces (e.g., "European", or "East African"). RFMIX will assign all distinct subpopulation names it finds in the sample map file an index number, in alphabetical order. The output will reference by index number; the order is given at the top of the output files. Blank lines and lines beginning with a '#' are ignored in the sample map file. Prefixing a sample with either # or \^ will exclude the sample from the reference input without needing to remove it from the reference VCF/BCF. Any sample not defined in the sample map will not be loaded from the reference VCF/BCF. This is a simple way to manipulate the content of your reference data and include or exclude entire subpopulations. 
+The sample map file specifies which subpopulation each reference sample represents. It is tab delimited text with at least two columns. The first column gives the sample name or identifier, which must match the one used in the reference VCF/BCF. The second column is a string naming a subpopulation and may contain spaces (e.g., "European", or "East African"). RFMIX will assign all distinct subpopulation names it finds in the sample map file an index number, in alphabetical order. The output will reference by index number; the order is given at the top of the output files. Blank lines and lines beginning with a '#' are ignored in the sample map file. Prefixing a sample with either # or \^ will exclude the sample from the reference input without needing to remove it from the reference VCF/BCF. Any sample not defined in the sample map will not be loaded from the reference VCF/BCF. This is a simple way to manipulate the content of your reference data and include or exclude entire subpopulations.
 
 ### Output files
 
 RFMIX upon completion will output two main files of interest: the most likely assignment of subpopulations per CRF point (\<output basename\>.msp.tsv), and the marginal probabilities of each subpopulation being the ancestral population of the corresponding CRF point (\<output basename\>.fb.tsv). The latter is produced by computing the forward-backward algorithm on the CRF, and the former by using the Viterbi algorithm. The .msp.tsv file is condensed such that CRF windows are combined if all query samples are in the sample subpopulations for successive windows. Thus, each line might represent several CRF points.
 
-Both output files are tab separated values forming a matrix with rows corresponding to genomic position and columns corresponding to haplotypes. The files include column headers and leading columns that indicate the position or range covered for each row. For the forward-backward results, haplotypes are tab delimited, but the array of probabilities for each haplotype at each window (row) is a set of space delimited columns within each tab delimited haplotype column. The order and names of the reference subpopulations are indicated in a header row. 
+Both output files are tab separated values forming a matrix with rows corresponding to genomic position and columns corresponding to haplotypes. The files include column headers and leading columns that indicate the position or range covered for each row. For the forward-backward results, haplotypes are tab delimited, but the array of probabilities for each haplotype at each window (row) is a set of space delimited columns within each tab delimited haplotype column. The order and names of the reference subpopulations are indicated in a header row.
 
 Global *diploid* ancestry estimates are computed by RFMIX and output to \<output basename\>.rfmix.Q, corresponding to the .Q output files of the global ancestry analysis programs *fastStructure* or *ADMIXTURE*. Please note that the ordering of subpopulations in columns for *fastStructure* or *ADMIXTURE* is not guaranteed to be the same as RFMIX and the ordering may change for different runs of those programs. RFMIX will always output in the same order (indicated in a header line) if the reference file used is the same. Additionally, RFMIX will add the sample name/id from the VCF input as a leading column.
 
@@ -70,7 +70,7 @@ The option --analyze-range=\<string\> can be used to restrict analysis only to t
 ### Limitations
 
 + The quality and accuracy of the results depends directly on the extent to which the haplotypes provided for each reference population captures the breadth of genetic diversity within that population.
-+ Single or small sample sizes often lack reference homozygote genotype calls at known variable sites and it is not possible to know from a VCF/BCF file whether read data supporting a reference homozygote call was observed. Unfortunately, this information is very informative to RFMIX and so it being censored may strongly impact results. 
++ Single or small sample sizes often lack reference homozygote genotype calls at known variable sites and it is not possible to know from a VCF/BCF file whether read data supporting a reference homozygote call was observed. Unfortunately, this information is very informative to RFMIX and so it being censored may strongly impact results.
 + Accuracy of the results, and continuity of subpopulation assignment along each haplotype, depends on the accuracy of the phasing of diploid data which must be performed separately as a pre-requisite. The phase-correction features of RFMIX, if enabled, can not correct all phasing errors and will perform poorly if the initial phasing presented to the program is poor.
 + RFMIX version 2 accepts inputs containing missing data. However, at time of writing, this feature has not been tested or studied. The rate at which results degrade for increasing amounts of missing data is not known.
 + The program will assume genotypes are phased even if the VCF file indicates they are not.
@@ -80,4 +80,3 @@ The option --analyze-range=\<string\> can be used to restrict analysis only to t
 For academic users or any other users using the program free of charge:
 
 THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM (RFMIX) "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU. SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
-
