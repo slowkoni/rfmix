@@ -8,3 +8,5 @@ rfmix_SOURCES = cmdline-utils.c inputline.cpp genetic-map.cpp md5rng.cpp hash-ta
 
 simulate_SOURCES = cmdline-utils.c inputline.cpp genetic-map.cpp hash-table.cpp vcf.cpp simulate.cpp s-sample.cpp s-subpop.cpp
 
+docker: Dockerfile
+	docker build -t rfmix:latest .
