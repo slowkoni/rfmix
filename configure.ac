@@ -1,8 +1,8 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.62])
-AC_INIT([RFMIX], [v2.03-r0], markoni.wright@gmail.com)
+AC_PREREQ([2.71])
+AC_INIT([RFMIX],[v2.03-r0],[markoni.wright@gmail.com])
 AC_CONFIG_SRCDIR([./rfmix.cpp])
 AM_INIT_AUTOMAKE
 
@@ -33,4 +33,5 @@ AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_CHECK_FUNCS([gettimeofday memset strdup strerror strtol strtoul])
 
-AC_OUTPUT(Makefile)
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
